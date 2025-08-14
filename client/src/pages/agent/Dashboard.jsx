@@ -390,7 +390,7 @@ export default function Dashboard() {
         </SimpleGrid>
 
         {/* Active Packages */}
-        {activePackages.filter(pkg => !pkg.claimed).length > 0 && (
+        {activePackages.filter(pkg => !pkg.claimed || pkg.isMatured).length > 0 && (
           <Box mb={8}>
             <Heading 
               as="h2" 
@@ -403,7 +403,7 @@ export default function Dashboard() {
               Active Packages
             </Heading>
             <SimpleGrid columns={{ base: 2, md: 3, lg: 4 }} spacing={4}>
-              {activePackages.filter(pkg => !pkg.claimed).map((pkg) => (
+              {activePackages.filter(pkg => !pkg.claimed || pkg.isMatured).map((pkg) => (
                 <Card 
                   key={pkg._id}
                   bg="#1E2528" 
