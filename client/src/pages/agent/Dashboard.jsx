@@ -389,7 +389,7 @@ export default function Dashboard() {
           />
         </SimpleGrid>
 
-        {/* Active Packages - Show unclaimed packages or matured but unclaimed packages */}
+        {/* Active & Matured Packages - Show all unclaimed packages (both active and matured) */}
         {activePackages.filter(pkg => !pkg.claimed).length > 0 && (
           <Box mb={8}>
             <Heading 
@@ -403,7 +403,11 @@ export default function Dashboard() {
               Active Packages
             </Heading>
             <SimpleGrid columns={{ base: 2, md: 3, lg: 4 }} spacing={4}>
-              {activePackages.filter(pkg => !pkg.claimed).map((pkg) => (
+              {/* Show all unclaimed packages, whether active or matured */}
+              {activePackages
+                .filter(pkg => !pkg.claimed)
+                .sort((a, b) => a.isMatured - b.isMatured) // Sort so matured packages appear first
+                .map((pkg) => (
                 <Card 
                   key={pkg._id}
                   bg="#1E2528" 
