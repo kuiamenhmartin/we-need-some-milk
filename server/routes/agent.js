@@ -272,6 +272,29 @@ router.post('/packages/activate', auth, async (req, res) => {
 // Claim matured package earnings
 router.post('/packages/claim', agentController.claimMaturedPackage);
 
+// Test endpoint to check all packages for the current user
+router.get('/test-packages', async (req, res) => {
+  try {
+    console.log('Testing packages for user:', req.user._id);
+    
+    const packages = await Package.find({
+      user: req.user._id,
+      status: 'active'
+    }).select('_id packageType amount claimed endDate startDate isMatured');
+    
+    console.log('Found packages:', packages);
+    
+    res.json({
+      success: true,
+      packages: packages,
+      count: packages.length
+    });
+  } catch (error) {
+    console.error('Error in test endpoint:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Get agent's active packages
 router.get('/packages/active', agentController.getActivePackages);
 

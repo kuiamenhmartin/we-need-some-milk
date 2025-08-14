@@ -306,11 +306,11 @@ export default function Dashboard() {
 
   const handleClaimPackage = async (packageId) => {
     try {
-      const response = await axios.post('/agent/claim-package', { packageId });
+      const response = await axios.post('/agent/packages/claim', { packageId });
       
       toast({
         title: 'Package Claimed',
-        description: `Claimed ₱${response.data.total.toLocaleString()} (₱${response.data.principal.toLocaleString()} principal + ₱${response.data.interest.toLocaleString()} interest)`,
+        description: `Successfully claimed package earnings!`,  // Updated to match the server response
         status: 'success',
         duration: 5000,
         isClosable: true,
@@ -389,8 +389,8 @@ export default function Dashboard() {
           />
         </SimpleGrid>
 
-        {/* Active Packages */}
-        {activePackages.filter(pkg => !pkg.claimed || pkg.isMatured).length > 0 && (
+        {/* Active Packages - Show unclaimed packages or matured but unclaimed packages */}
+        {activePackages.filter(pkg => !pkg.claimed).length > 0 && (
           <Box mb={8}>
             <Heading 
               as="h2" 
@@ -403,7 +403,7 @@ export default function Dashboard() {
               Active Packages
             </Heading>
             <SimpleGrid columns={{ base: 2, md: 3, lg: 4 }} spacing={4}>
-              {activePackages.filter(pkg => !pkg.claimed || pkg.isMatured).map((pkg) => (
+              {activePackages.filter(pkg => !pkg.claimed).map((pkg) => (
                 <Card 
                   key={pkg._id}
                   bg="#1E2528" 
