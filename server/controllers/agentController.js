@@ -982,13 +982,27 @@ exports.changePassword = async (req, res) => {
     }
 };
 
-// Get active packages with normal display
+// Get active and matured (but unclaimed) packages
 exports.getActivePackages = async (req, res) => {
     try {
+        // Get all packages that are either active or matured but not claimed
         const packages = await Package.find({
             user: req.user._id,
-            status: 'active'
+            status: 'active',
+            $or: [
+                { claimed: { $exists: false } },  // Not claimed (legacy support)
+                { claimed: false }                // Explicitly not claimed
+            ]
         });
+        
+        console.log('Found packages:', packages.map(p => ({
+            _id: p._id,
+            packageType: p.packageType,
+            status: p.status,
+            claimed: p.claimed,
+            endDate: p.endDate,
+            isMatured: new Date() >= new Date(p.endDate)
+        })));
 
         const now = new Date();
         const formattedPackages = packages.map(pkg => {

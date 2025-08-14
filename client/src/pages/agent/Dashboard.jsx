@@ -203,30 +203,47 @@ export default function Dashboard() {
       setStats(statsRes.data);
       // Compute daysRemaining for each package
       const now = new Date();
-      const packages = Array.isArray(packagesRes.data) ? packagesRes.data : packagesRes.data.packages || [];
+      const packages = Array.isArray(packagesRes.data) ? packagesRes.data : packagesRes.data?.packages || [];
+      
+      // Debug log to check received packages
+      console.log('Received packages from server:', packages);
+      
       const packagesWithDays = packages.map(pkg => {
         // Use the server-calculated values if available, otherwise calculate locally
-        let daysRemaining = pkg.daysRemaining;
-        let totalDays = pkg.totalDays;
-        let isMatured = pkg.isMatured;
+        const start = new Date(pkg.startDate);
+        const end = new Date(pkg.endDate);
         
-        // If server didn't provide these values, calculate them
-        if (typeof daysRemaining === 'undefined' || typeof totalDays === 'undefined') {
-          const start = new Date(pkg.startDate);
-          const end = new Date(pkg.endDate);
-          
-          // Check if dates are valid
-          if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-            console.error('Invalid dates for package:', pkg._id, { startDate: pkg.startDate, endDate: pkg.endDate });
-            daysRemaining = 0;
-            totalDays = pkg.packageType === 1 ? 12 : pkg.packageType === 2 ? 20 : 30;
-            isMatured = true;
-          } else {
-            totalDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
-            daysRemaining = Math.max(0, Math.ceil((end - now) / (1000 * 60 * 60 * 24)));
-            isMatured = daysRemaining === 0;
-          }
+        // Calculate days remaining and total days
+        let daysRemaining, totalDays, isMatured;
+        
+        // Check if dates are valid
+        if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+          console.error('Invalid dates for package:', pkg._id, { 
+            startDate: pkg.startDate, 
+            endDate: pkg.endDate,
+            packageType: pkg.packageType
+          });
+          daysRemaining = 0;
+          totalDays = pkg.packageType === 1 ? 12 : pkg.packageType === 2 ? 20 : 30;
+          isMatured = true;
+        } else {
+          totalDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+          const daysPassed = Math.ceil((now - start) / (1000 * 60 * 60 * 24));
+          daysRemaining = Math.max(0, totalDays - daysPassed);
+          isMatured = now >= end;
         }
+        
+        // Debug log for each package
+        console.log('Processing package:', {
+          _id: pkg._id,
+          packageType: pkg.packageType,
+          startDate: pkg.startDate,
+          endDate: pkg.endDate,
+          claimed: pkg.claimed,
+          isMatured,
+          daysRemaining,
+          totalDays
+        });
         
         return { ...pkg, daysRemaining, totalDays, isMatured };
       });
@@ -389,8 +406,8 @@ export default function Dashboard() {
           />
         </SimpleGrid>
 
-        {/* Active & Matured Packages - Show all unclaimed packages (both active and matured) */}
-        {activePackages.filter(pkg => !pkg.claimed).length > 0 && (
+        {/* All Unclaimed Packages - Show both active and matured but unclaimed packages */}
+        {activePackages.length > 0 && (
           <Box mb={8}>
             <Heading 
               as="h2" 
@@ -400,13 +417,12 @@ export default function Dashboard() {
               mb={4}
               fontFamily="'Montserrat', sans-serif"
             >
-              Active Packages
+              My Packages
             </Heading>
             <SimpleGrid columns={{ base: 2, md: 3, lg: 4 }} spacing={4}>
-              {/* Show all unclaimed packages, whether active or matured */}
+              {/* Show all unclaimed packages, with matured ones first */}
               {activePackages
-                .filter(pkg => !pkg.claimed)
-                .sort((a, b) => a.isMatured - b.isMatured) // Sort so matured packages appear first
+                .sort((a, b) => (a.isMatured === b.isMatured) ? 0 : a.isMatured ? 1 : -1) // Matured packages first
                 .map((pkg) => (
                 <Card 
                   key={pkg._id}
