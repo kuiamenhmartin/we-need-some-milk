@@ -592,10 +592,17 @@ exports.claimMaturedPackage = async (req, res) => {
     const { packageId } = req.body;
     const userId = req.user._id;
 
-    // Find the package
-    const pkg = await Package.findOne({ _id: packageId, user: userId, status: 'active' });
+    // Find the package (can be active or completed but unclaimed)
+    const pkg = await Package.findOne({ 
+      _id: packageId, 
+      user: userId, 
+      $or: [
+        { status: 'active' },
+        { status: 'completed' }
+      ]
+    });
     if (!pkg) {
-      return res.status(404).json({ message: 'Package not found or not active.' });
+      return res.status(404).json({ message: 'Package not found or not available.' });
     }
 
     // Check if matured
@@ -779,11 +786,14 @@ exports.claimPackage = async (req, res) => {
             return res.status(400).json({ message: 'Package ID is required' });
         }
 
-        // Find the package
+        // Find the package (can be active or completed but unclaimed)
         const pkg = await Package.findOne({
             _id: packageId,
             user: req.user._id,
-            status: 'active'
+            $or: [
+                { status: 'active' },
+                { status: 'completed' }
+            ]
         });
 
         console.log('Found package:', pkg ? { 
@@ -985,26 +995,49 @@ exports.changePassword = async (req, res) => {
 // Get active and matured (but unclaimed) packages
 exports.getActivePackages = async (req, res) => {
     try {
-        // Get all packages that are either active or matured but not claimed
+        // Get all active packages AND completed but unclaimed packages
         const packages = await Package.find({
             user: req.user._id,
-            status: 'active',
             $or: [
-                { claimed: { $exists: false } },  // Not claimed (legacy support)
-                { claimed: false }                // Explicitly not claimed
+                {
+                    status: 'active',
+                    $or: [
+                        { claimed: { $exists: false } },  // Not claimed (legacy support)
+                        { claimed: false }                // Explicitly not claimed
+                    ]
+                },
+                {
+                    status: 'completed',
+                    $or: [
+                        { claimed: { $exists: false } },  // Not claimed (legacy support)
+                        { claimed: false }                // Explicitly not claimed
+                    ]
+                }
             ]
         });
         
+        console.log('Package query results:', {
+            total: packages.length,
+            active: packages.filter(p => p.status === 'active').length,
+            completed: packages.filter(p => p.status === 'completed').length,
+            claimed: packages.filter(p => p.claimed).length,
+            unclaimed: packages.filter(p => !p.claimed).length
+        });
+        
+        const now = new Date();
+        console.log('Current time:', now);
         console.log('Found packages:', packages.map(p => ({
             _id: p._id,
             packageType: p.packageType,
             status: p.status,
             claimed: p.claimed,
+            startDate: p.startDate,
             endDate: p.endDate,
-            isMatured: new Date() >= new Date(p.endDate)
+            isMatured: new Date(p.endDate) <= now,
+            daysRemaining: Math.ceil((new Date(p.endDate) - now) / (1000 * 60 * 60 * 24))
         })));
 
-        const now = new Date();
+        // Process packages and filter out any null values from invalid packages
         const formattedPackages = packages.map(pkg => {
             // Debug logging for packages with potential date issues
             if (!pkg.startDate || !pkg.endDate) {
@@ -1014,6 +1047,8 @@ exports.getActivePackages = async (req, res) => {
                     endDate: pkg.endDate,
                     packageType: pkg.packageType
                 });
+                // Skip this package as it's invalid
+                return null;
             }
             
             const startDate = new Date(pkg.startDate);
@@ -1029,21 +1064,15 @@ exports.getActivePackages = async (req, res) => {
                     endDate: pkg.endDate,
                     packageType: pkg.packageType
                 });
-                // Set default values for invalid dates
-                const defaultStartDate = new Date();
-                const defaultEndDate = new Date();
-                defaultEndDate.setDate(defaultEndDate.getDate() + (pkg.packageType === 1 ? 12 : pkg.packageType === 2 ? 20 : 30));
-                
-                daysSinceStart = Math.floor((now - defaultStartDate) / (1000 * 60 * 60 * 24));
-                totalDays = pkg.packageType === 1 ? 12 : pkg.packageType === 2 ? 20 : 30;
-                daysRemaining = Math.max(0, totalDays - daysSinceStart);
-                isMatured = now >= defaultEndDate;
-            } else {
-                daysSinceStart = Math.floor((now - startDate) / (1000 * 60 * 60 * 24));
-                totalDays = pkg.packageType === 1 ? 12 : pkg.packageType === 2 ? 20 : 30;
-                daysRemaining = Math.max(0, totalDays - daysSinceStart);
-                isMatured = now >= endDate;
+                // Skip this package as it has invalid dates
+                return null;
             }
+            
+            // Calculate package metrics
+            totalDays = pkg.packageType === 1 ? 12 : pkg.packageType === 2 ? 20 : 30;
+            daysSinceStart = Math.floor((now - startDate) / (1000 * 60 * 60 * 24));
+            daysRemaining = Math.max(0, Math.ceil((endDate - now) / (1000 * 60 * 60 * 24)));
+            isMatured = now >= endDate;
 
             // Ensure all packages show correct daily income and total earnings
             let displayDailyIncome = pkg.dailyIncome;
@@ -1105,7 +1134,10 @@ exports.getActivePackages = async (req, res) => {
             };
         });
 
-        res.json(formattedPackages);
+        // Filter out any null packages before sending the response
+        const validPackages = formattedPackages.filter(pkg => pkg !== null);
+        console.log('Sending valid packages:', validPackages.length);
+        res.json(validPackages);
     } catch (error) {
         console.error('Error fetching active packages:', error);
         res.status(500).json({ message: 'Error fetching active packages' });

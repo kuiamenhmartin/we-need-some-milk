@@ -279,7 +279,10 @@ router.get('/test-packages', async (req, res) => {
     
     const packages = await Package.find({
       user: req.user._id,
-      status: 'active'
+      $or: [
+        { status: 'active' },
+        { status: 'completed' }
+      ]
     }).select('_id packageType amount claimed endDate startDate isMatured');
     
     console.log('Found packages:', packages);
@@ -313,7 +316,10 @@ router.get('/test-packages', async (req, res) => {
     
     const packages = await Package.find({
       user: req.user._id,
-      status: 'active'
+      $or: [
+        { status: 'active' },
+        { status: 'completed' }
+      ]
     }).select('_id packageType amount claimed endDate startDate');
     
     console.log('Found packages:', packages);
@@ -361,7 +367,10 @@ router.post('/claim-packages', async (req, res) => {
     try {
         const packages = await Package.find({
             user: req.user._id,
-            status: 'active',
+            $or: [
+                { status: 'active' },
+                { status: 'completed' }
+            ],
             claimed: false
         });
 
