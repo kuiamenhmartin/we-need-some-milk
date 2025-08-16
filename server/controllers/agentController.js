@@ -33,14 +33,55 @@ exports.getEarnings = async (req, res) => {
             const endDate = new Date(pkg.endDate);
             const totalDays = pkg.packageType === 1 ? 12 : pkg.packageType === 2 ? 20 : 30;
             
-            // Only include claimed packages in sharedEarnings
-            if (pkg.claimed) {
-                const totalEarnings = (pkg.amount || 0) + (pkg.totalEarnings || 0);
-                sharedEarnings += totalEarnings;
-            } else if (now >= endDate) {
-                // Matured but not claimed
-                const totalEarnings = (pkg.amount || 0) + (pkg.totalEarnings || 0);
-                pendingEarnings += totalEarnings;
+                    // Only include claimed packages in sharedEarnings
+        if (pkg.claimed) {
+            // For claimed packages, totalEarnings already includes the principal
+            const totalEarnings = pkg.totalEarnings || 0;
+            sharedEarnings += totalEarnings;
+            
+            console.log('Claimed package earnings:', {
+                packageId: pkg._id,
+                packageType: pkg.packageType,
+                amount: pkg.amount,
+                totalEarnings: pkg.totalEarnings,
+                addedToSharedEarnings: totalEarnings,
+                runningTotal: sharedEarnings
+            });
+            
+            // Validate that totalEarnings makes sense
+            if (totalEarnings <= pkg.amount) {
+                console.warn('Package has suspicious totalEarnings:', {
+                    packageId: pkg._id,
+                    amount: pkg.amount,
+                    totalEarnings: totalEarnings,
+                    expectedMin: pkg.amount * 1.2 // Should be at least 20% more than investment
+                });
+            }
+        } else if (now >= endDate) {
+                // Matured but not claimed - calculate potential earnings
+                const totalDays = pkg.packageType === 1 ? 12 : pkg.packageType === 2 ? 20 : 30;
+                let potentialEarnings;
+                
+                if (pkg.packageType === 1) {
+                    const baseAmount = 100;
+                    const baseTotal = 120;
+                    const multiplier = pkg.amount / baseAmount;
+                    potentialEarnings = baseTotal * multiplier;
+                } else if (pkg.packageType === 2) {
+                    const baseAmount = 500;
+                    const baseTotal = 750;
+                    const multiplier = pkg.amount / baseAmount;
+                    potentialEarnings = baseTotal * multiplier;
+                } else if (pkg.packageType === 3) {
+                    const baseAmount = 1000;
+                    const baseTotal = 3000;
+                    const multiplier = pkg.amount / baseAmount;
+                    potentialEarnings = baseTotal * multiplier;
+                } else {
+                    potentialEarnings = 0;
+                }
+                
+                pendingEarnings += potentialEarnings;
             } else {
                 // Not matured - track amount but don't show in stats
                 immatureAmount += pkg.amount;
@@ -60,19 +101,46 @@ exports.getEarnings = async (req, res) => {
             indirectReferral: user.referralEarnings?.indirect || 0,
             totalClicks: user.clickEarnings || 0,
             sharedEarnings: sharedEarnings,
-            pendingEarnings
+            pendingEarnings,
+            packagesCount: packages.length,
+            claimedPackages: packages.filter(p => p.claimed).length,
+            maturedUnclaimed: packages.filter(p => !p.claimed && now >= new Date(p.endDate)).length,
+            userSharedEarnings: user.sharedEarnings || 0
         });
+        
+        console.log('Shared Capital Earnings breakdown:', {
+            calculatedFromPackages: sharedEarnings,
+            userFieldValue: user.sharedEarnings || 0,
+            difference: sharedEarnings - (user.sharedEarnings || 0)
+        });
+        
+        // If there's a significant discrepancy, log a warning
+        const discrepancy = Math.abs(sharedEarnings - (user.sharedEarnings || 0));
+        if (discrepancy > 1000) { // More than ₱1000 difference
+            console.warn('LARGE DISCREPANCY DETECTED:', {
+                calculatedFromPackages: sharedEarnings,
+                userFieldValue: user.sharedEarnings || 0,
+                difference: discrepancy,
+                percentage: ((discrepancy / (user.sharedEarnings || 1)) * 100).toFixed(2) + '%'
+            });
+        }
 
+        // Use the user's stored sharedEarnings value, but log any discrepancies
+        const finalSharedEarnings = user.sharedEarnings || 0;
+        
         res.json({
             wallet: availableWallet,
             directReferral: user.referralEarnings?.direct || 0,
             indirectReferral: user.referralEarnings?.indirect || 0,
             totalClicks: user.clickEarnings || 0,
-            sharedEarnings: sharedEarnings,
+            sharedEarnings: finalSharedEarnings, // Use stored value
             pendingEarnings: pendingEarnings,
             immaturePackages: immaturePackages,
             immatureAmount: immatureAmount,
-            totalWithdraw: user.totalWithdraw || 0
+            totalWithdraw: user.totalWithdraw || 0,
+            // Include calculated value for debugging
+            calculatedSharedEarnings: sharedEarnings,
+            discrepancy: finalSharedEarnings - sharedEarnings
         });
     } catch (error) {
         console.error('Error calculating earnings:', error);
@@ -605,36 +673,204 @@ exports.claimMaturedPackage = async (req, res) => {
       return res.status(404).json({ message: 'Package not found or not available.' });
     }
 
+    // Validate package data
+    if (!pkg.amount || !pkg.packageType || !pkg.endDate) {
+      console.error('Invalid package data:', pkg);
+      return res.status(400).json({ message: 'Invalid package data' });
+    }
+
     // Check if matured
     const now = new Date();
     if (now < pkg.endDate) {
       return res.status(400).json({ message: 'Package has not matured yet.' });
     }
 
-    // Calculate final earnings
-    const packageConfig = {
-      1: { rate: 0.20, duration: 12 },
-      2: { rate: 0.50, duration: 20 }
-    }[pkg.packageType];
+    // Check if already claimed
+    if (pkg.claimed) {
+      return res.status(400).json({ message: 'Package has already been claimed.' });
+    }
 
-    // Calculate total earnings (principal + profit)
-    const profitAmount = pkg.amount * packageConfig.rate;
-    const totalAmount = pkg.amount + profitAmount;
+    // Calculate final earnings based on dashboard calculation
+    let totalAmount;
+    let profitAmount;
+    
+    if (pkg.packageType === 1) {
+      // Package 1: Scale based on investment amount
+      // Base: ₱100 → ₱120 total return (20% profit)
+      const baseAmount = 100;
+      const baseTotal = 120;
+      const multiplier = pkg.amount / baseAmount;
+      totalAmount = parseFloat((baseTotal * multiplier).toFixed(2));
+      profitAmount = totalAmount - pkg.amount;
+    } else if (pkg.packageType === 2) {
+      // Package 2: Scale based on investment amount
+      // Base: ₱500 → ₱750 total return (50% profit)
+      const baseAmount = 500;
+      const baseTotal = 750;
+      const multiplier = pkg.amount / baseAmount;
+      totalAmount = parseFloat((baseTotal * multiplier).toFixed(2));
+      profitAmount = totalAmount - pkg.amount;
+    } else if (pkg.packageType === 3) {
+      // Package 3: Scale based on investment amount
+      // Base: ₱1000 → ₱3000 total return (200% profit)
+      const baseAmount = 1000;
+      const baseTotal = 3000;
+      const multiplier = pkg.amount / baseAmount;
+      totalAmount = parseFloat((baseTotal * multiplier).toFixed(2));
+      profitAmount = totalAmount - pkg.amount;
+    } else {
+      return res.status(400).json({ message: 'Invalid package type.' });
+    }
 
-    // Update user sharedEarnings (not wallet)
-    const user = await User.findById(userId);
-    user.sharedEarnings = (user.sharedEarnings || 0) + totalAmount;
-    await user.save();
+    console.log('Earnings calculation:', {
+      packageType: pkg.packageType,
+      investment: pkg.amount,
+      profit: profitAmount,
+      total: totalAmount,
+      baseAmount: pkg.packageType === 1 ? 100 : pkg.packageType === 2 ? 500 : 1000,
+      baseTotal: pkg.packageType === 1 ? 120 : pkg.packageType === 2 ? 750 : 3000,
+      multiplier: pkg.amount / (pkg.packageType === 1 ? 100 : pkg.packageType === 2 ? 500 : 1000)
+    });
+
+    // Get current user data to access sharedEarnings
+    const currentUser = await User.findById(userId);
+    if (!currentUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Validate the calculation results
+    if (isNaN(totalAmount) || isNaN(profitAmount) || totalAmount <= 0) {
+      console.error('Invalid calculation results:', { totalAmount, profitAmount, packageType: pkg.packageType, amount: pkg.amount });
+      return res.status(400).json({ message: 'Error calculating package earnings' });
+    }
+    
+    // Update user sharedEarnings (not wallet) using atomic operation
+    const oldSharedEarnings = currentUser.sharedEarnings || 0;
+    const newSharedEarnings = parseFloat((oldSharedEarnings + totalAmount).toFixed(2));
+    
+    console.log('Updating user sharedEarnings:', {
+      userId: userId,
+      oldBalance: oldSharedEarnings,
+      addedAmount: totalAmount,
+      newBalance: newSharedEarnings,
+      calculation: `${oldSharedEarnings} + ${totalAmount} = ${newSharedEarnings}`
+    });
+    
+    // Use atomic update to avoid race conditions
+    const updateResult = await User.findByIdAndUpdate(
+      userId,
+      { $set: { sharedEarnings: newSharedEarnings } },
+      { new: true }
+    );
+    
+    if (!updateResult) {
+      throw new Error('Failed to update user sharedEarnings');
+    }
+    
+    console.log('User sharedEarnings updated successfully via atomic operation');
+    console.log('Verification - User sharedEarnings after atomic update:', {
+      userId: userId,
+      sharedEarnings: updateResult.sharedEarnings,
+      expectedValue: newSharedEarnings,
+      actualValue: updateResult.sharedEarnings,
+      match: updateResult.sharedEarnings === newSharedEarnings
+    });
+    
+    // Double-check by fetching the user again
+    const verificationUser = await User.findById(userId);
+    console.log('Double verification - User fetched after update:', {
+      userId: userId,
+      sharedEarnings: verificationUser.sharedEarnings,
+      expectedValue: newSharedEarnings,
+      actualValue: verificationUser.sharedEarnings,
+      match: verificationUser.sharedEarnings === newSharedEarnings
+    });
+    
+    // Also check the raw database value
+    const rawUser = await User.findById(userId).lean();
+    console.log('Raw database values:', {
+      userId: userId,
+      sharedEarnings: rawUser.sharedEarnings,
+      sharedEarningsType: typeof rawUser.sharedEarnings,
+      allFields: Object.keys(rawUser).filter(key => key.includes('shared') || key.includes('earnings'))
+    });
 
     // Mark package as completed with final earnings
     pkg.status = 'completed';
     pkg.totalEarnings = totalAmount; // Store the total amount as earnings for completed packages
-    await pkg.save();
+    pkg.claimed = true;
+    pkg.claimedAt = now;
+    
+    const packageUpdateResult = await pkg.save();
+    if (!packageUpdateResult) {
+      throw new Error('Failed to update package status');
+    }
+    
+    console.log('Package updated successfully:', {
+      packageId: pkg._id,
+      status: pkg.status,
+      claimed: pkg.claimed,
+      totalEarnings: pkg.totalEarnings
+    });
 
-    res.json({ message: 'Earnings claimed successfully!', totalEarnings });
+    // Create transaction record
+    try {
+      const transaction = new SharedCapitalTransaction({
+        user: userId,
+        type: 'earning',
+        amount: totalAmount,
+        package: `Package ${pkg.packageType}`,
+        status: 'completed',
+        description: `Claimed Package ${pkg.packageType}: principal ₱${pkg.amount.toLocaleString()} + profit ₱${profitAmount.toLocaleString()}`
+      });
+      await transaction.save();
+      console.log('Transaction created successfully');
+    } catch (transactionError) {
+      console.error('Error creating transaction:', transactionError);
+      // Don't fail the request if transaction creation fails
+    }
+
+    const response = {
+      success: true,
+      message: 'Earnings claimed successfully!',
+      totalEarnings: totalAmount,
+      packageType: pkg.packageType,
+      investment: pkg.amount,
+      profit: profitAmount,
+      newSharedEarnings: newSharedEarnings
+    };
+    
+    console.log('Claim package success response:', response);
+    res.json(response);
   } catch (error) {
     console.error('Error claiming earnings:', error);
-    res.status(500).json({ message: 'Error claiming earnings' });
+    console.error('Error details:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    });
+    
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Validation error',
+        error: error.message 
+      });
+    }
+
+    if (error.name === 'CastError') {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Invalid package ID format',
+        error: error.message 
+      });
+    }
+
+    res.status(500).json({ 
+      success: false,
+      message: 'Error claiming earnings',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
   }
 };
 
@@ -808,8 +1044,16 @@ exports.claimPackage = async (req, res) => {
             return res.status(404).json({ message: 'Package not found or already claimed' });
         }
 
+        // Validate package data
+        if (!pkg.amount || !pkg.packageType || !pkg.endDate) {
+            console.error('Invalid package data:', pkg);
+            return res.status(400).json({ message: 'Invalid package data' });
+        }
+
         const endDate = new Date(pkg.endDate);
-        if (now < endDate) {
+        // For completed packages, we know they're matured
+        // For active packages, check if they've matured
+        if (pkg.status === 'active' && now < endDate) {
             return res.status(400).json({ 
                 message: 'Package has not matured yet',
                 maturityDate: endDate
@@ -824,36 +1068,59 @@ exports.claimPackage = async (req, res) => {
         const totalDays = pkg.packageType === 1 ? 12 : pkg.packageType === 2 ? 20 : 30;
         let interestEarned, totalEarnings;
         
-        if (pkg.packageType === 1) {
-            // Package 1: Scale based on investment amount
-            // Base: ₱100 → ₱20 profit → ₱120 total return
-            const baseAmount = 100;
-            const baseProfit = 20;
-            const baseTotal = 120;
-            const multiplier = pkg.amount / baseAmount;
+        try {
+            if (pkg.packageType === 1) {
+                // Package 1: Scale based on investment amount
+                // Base: ₱100 → ₱20 profit → ₱120 total return
+                const baseAmount = 100;
+                const baseProfit = 20;
+                const baseTotal = 120;
+                const multiplier = pkg.amount / baseAmount;
+                
+                interestEarned = parseFloat((baseProfit * multiplier).toFixed(2));
+                totalEarnings = parseFloat((baseTotal * multiplier).toFixed(2));
+            } else if (pkg.packageType === 2) {
+                // Package 2: Scale based on investment amount
+                // Base: ₱500 → ₱250 profit → ₱750 total return
+                const baseAmount = 500;
+                const baseProfit = 250;
+                const baseTotal = 750;
+                const multiplier = pkg.amount / baseAmount;
+                
+                interestEarned = parseFloat((baseProfit * multiplier).toFixed(2));
+                totalEarnings = parseFloat((baseTotal * multiplier).toFixed(2));
+            } else if (pkg.packageType === 3) {
+                // Package 3: Scale based on investment amount
+                // Base: ₱1000 → ₱2000 profit → ₱3000 total return
+                const baseAmount = 1000;
+                const baseProfit = 2000;
+                const baseTotal = 3000;
+                const multiplier = pkg.amount / baseAmount;
+                
+                interestEarned = parseFloat((baseProfit * multiplier).toFixed(2));
+                totalEarnings = parseFloat((baseTotal * multiplier).toFixed(2));
+            } else {
+                throw new Error(`Invalid package type: ${pkg.packageType}`);
+            }
             
-            interestEarned = parseFloat((baseProfit * multiplier).toFixed(2));
-            totalEarnings = parseFloat((baseTotal * multiplier).toFixed(2));
-        } else if (pkg.packageType === 2) {
-            // Package 2: Scale based on investment amount
-            // Base: ₱500 → ₱250 profit → ₱750 total return
-            const baseAmount = 500;
-            const baseProfit = 250;
-            const baseTotal = 750;
-            const multiplier = pkg.amount / baseAmount;
+            // Validate calculated values
+            if (isNaN(interestEarned) || isNaN(totalEarnings)) {
+                throw new Error('Invalid calculated earnings');
+            }
             
-            interestEarned = parseFloat((baseProfit * multiplier).toFixed(2));
-            totalEarnings = parseFloat((baseTotal * multiplier).toFixed(2));
-        } else if (pkg.packageType === 3) {
-            // Package 3: Scale based on investment amount
-            // Base: ₱1000 → ₱2000 profit → ₱3000 total return
-            const baseAmount = 1000;
-            const baseProfit = 2000;
-            const baseTotal = 3000;
-            const multiplier = pkg.amount / baseAmount;
-            
-            interestEarned = parseFloat((baseProfit * multiplier).toFixed(2));
-            totalEarnings = parseFloat((baseTotal * multiplier).toFixed(2));
+            console.log('Calculated earnings:', { 
+                packageType: pkg.packageType, 
+                amount: pkg.amount, 
+                interestEarned, 
+                totalEarnings 
+            });
+        } catch (calcError) {
+            console.error('Error calculating earnings:', calcError);
+            return res.status(400).json({ 
+                success: false,
+                message: 'Error calculating package earnings',
+                error: calcError.message 
+            });
         }
 
         // Get user
@@ -868,39 +1135,84 @@ exports.claimPackage = async (req, res) => {
         }
 
         // Update package status
-        pkg.claimed = true;
-        pkg.claimedAt = now;
-        await pkg.save();
-        console.log('Package updated successfully');
+        try {
+            pkg.claimed = true;
+            pkg.claimedAt = now;
+            await pkg.save();
+            console.log('Package updated successfully');
+        } catch (saveError) {
+            console.error('Error saving package:', saveError);
+            return res.status(500).json({ 
+                success: false,
+                message: 'Error updating package status',
+                error: saveError.message 
+            });
+        }
 
         // Credit principal + interest to Shared Capital Earnings
-        const oldSharedEarnings = user.sharedEarnings || 0;
-        user.sharedEarnings = parseFloat(((user.sharedEarnings || 0) + totalEarnings).toFixed(2));
-        console.log('Updating user sharedEarnings:', { 
-            old: oldSharedEarnings, 
-            new: user.sharedEarnings, 
-            added: totalEarnings 
-        });
-        await user.save();
-        console.log('User updated successfully');
+        try {
+            const oldSharedEarnings = user.sharedEarnings || 0;
+            user.sharedEarnings = parseFloat(((user.sharedEarnings || 0) + totalEarnings).toFixed(2));
+            console.log('Updating user sharedEarnings:', { 
+                old: oldSharedEarnings, 
+                new: user.sharedEarnings, 
+                added: totalEarnings 
+            });
+            await user.save();
+            console.log('User updated successfully');
+        } catch (userSaveError) {
+            console.error('Error saving user:', userSaveError);
+            // Try to revert package status
+            try {
+                pkg.claimed = false;
+                delete pkg.claimedAt;
+                await pkg.save();
+            } catch (revertError) {
+                console.error('Error reverting package status:', revertError);
+            }
+            return res.status(500).json({ 
+                success: false,
+                message: 'Error updating user earnings',
+                error: userSaveError.message 
+            });
+        }
 
         // Create transaction record
-        const transaction = new SharedCapitalTransaction({
-            user: req.user._id,
-            type: 'earning',
-            amount: totalEarnings,
-            package: `Package ${pkg.packageType}`,
-            status: 'completed',
-            description: `Claimed Package ${pkg.packageType}: principal ₱${pkg.amount.toLocaleString()} + interest ₱${interestEarned.toLocaleString()}`,
-            createdAt: now
-        });
-        console.log('Creating transaction:', { 
-            user: req.user._id, 
-            amount: totalEarnings, 
-            package: `Package ${pkg.packageType}` 
-        });
-        await transaction.save();
-        console.log('Transaction created successfully');
+        try {
+            const transaction = new SharedCapitalTransaction({
+                user: req.user._id,
+                type: 'earning',
+                amount: totalEarnings,
+                package: `Package ${pkg.packageType}`,
+                status: 'completed',
+                description: `Claimed Package ${pkg.packageType}: principal ₱${pkg.amount.toLocaleString()} + interest ₱${interestEarned.toLocaleString()}`
+            });
+            console.log('Creating transaction:', { 
+                user: req.user._id, 
+                amount: totalEarnings, 
+                package: `Package ${pkg.packageType}` 
+            });
+            await transaction.save();
+            console.log('Transaction created successfully');
+        } catch (transactionError) {
+            console.error('Error creating transaction:', transactionError);
+            // Try to revert user and package changes
+            try {
+                user.sharedEarnings = (user.sharedEarnings || 0) - totalEarnings;
+                await user.save();
+                
+                pkg.claimed = false;
+                delete pkg.claimedAt;
+                await pkg.save();
+            } catch (revertError) {
+                console.error('Error reverting changes:', revertError);
+            }
+            return res.status(500).json({ 
+                success: false,
+                message: 'Error creating transaction record',
+                error: transactionError.message 
+            });
+        }
 
         // Notify via WebSocket (outside transaction)
         try {
@@ -927,10 +1239,28 @@ exports.claimPackage = async (req, res) => {
         };
         
         console.log('Claim package success:', response);
-        res.json(response);
+        
+        // Ensure all values are serializable
+        const safeResponse = {
+            success: true,
+            message: 'Package claimed successfully',
+            total: Number(totalEarnings),
+            principal: Number(pkg.amount),
+            interest: Number(interestEarned),
+            packageType: Number(pkg.packageType),
+            claimDate: now.toISOString()
+        };
+        
+        res.json(safeResponse);
     } catch (error) {
         console.error('Error claiming package:', error);
         console.error('Error stack:', error.stack);
+        console.error('Error details:', {
+            name: error.name,
+            message: error.message,
+            code: error.code,
+            keyValue: error.keyValue
+        });
 
         // More specific error messages
         if (error.name === 'ValidationError') {
@@ -945,6 +1275,14 @@ exports.claimPackage = async (req, res) => {
             return res.status(400).json({ 
                 success: false,
                 message: 'Invalid package ID format',
+                error: error.message 
+            });
+        }
+
+        if (error.name === 'MongoError' || error.name === 'MongoServerError') {
+            return res.status(400).json({ 
+                success: false,
+                message: 'Database error',
                 error: error.message 
             });
         }

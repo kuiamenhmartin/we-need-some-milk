@@ -5920,3 +5920,6 @@
 2025-08-05T13:21:43.696Z - Uncaught Exception: Error: listen EADDRINUSE: address already in use 0.0.0.0:5001
 2025-08-05T13:27:05.360Z - Uncaught Exception: Error: listen EADDRINUSE: address already in use 0.0.0.0:5001
 2025-08-05T13:28:05.526Z - Uncaught Exception: Error: listen EADDRINUSE: address already in use 0.0.0.0:5001
+2025-08-16T05:03:13.074Z - Error claiming earnings: ReferenceError: totalEarnings is not defined
+2025-08-16T05:13:19.632Z - Error claiming earnings: ReferenceError: user is not defined
+2025-08-16T05:13:19.654Z - Error details: [object Object]

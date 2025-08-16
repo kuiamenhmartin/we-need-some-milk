@@ -362,6 +362,203 @@ router.get('/test-db', async (req, res) => {
   }
 });
 
+// Test endpoint to check user's sharedEarnings
+router.get('/test-user-earnings', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    const packages = await Package.find({ user: req.user._id, claimed: true });
+    
+    let calculatedSharedEarnings = 0;
+    for (const pkg of packages) {
+      calculatedSharedEarnings += pkg.totalEarnings || 0;
+    }
+    
+    res.json({
+      success: true,
+      userSharedEarnings: user.sharedEarnings || 0,
+      calculatedFromPackages: calculatedSharedEarnings,
+      difference: (user.sharedEarnings || 0) - calculatedSharedEarnings,
+      claimedPackages: packages.length,
+      packageDetails: packages.map(p => ({
+        id: p._id,
+        type: p.packageType,
+        amount: p.amount,
+        totalEarnings: p.totalEarnings,
+        claimed: p.claimed
+      }))
+    });
+  } catch (error) {
+    console.error('Test user earnings error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// Test endpoint to manually update user's sharedEarnings
+router.post('/test-update-earnings', auth, async (req, res) => {
+  try {
+    const { amount } = req.body;
+    const userId = req.user._id;
+    
+    const user = await User.findById(userId);
+    const oldValue = user.sharedEarnings || 0;
+    const newValue = oldValue + parseFloat(amount);
+    
+    console.log('Manual update test:', {
+      userId,
+      oldValue,
+      amount,
+      newValue
+    });
+    
+    const updateResult = await User.findByIdAndUpdate(
+      userId,
+      { $set: { sharedEarnings: newValue } },
+      { new: true }
+    );
+    
+    if (!updateResult) {
+      throw new Error('Failed to update user');
+    }
+    
+    console.log('Manual update result:', {
+      userId,
+      oldValue,
+      newValue,
+      actualValue: updateResult.sharedEarnings
+    });
+    
+    res.json({
+      success: true,
+      oldValue,
+      newValue,
+      actualValue: updateResult.sharedEarnings,
+      match: updateResult.sharedEarnings === newValue
+    });
+  } catch (error) {
+    console.error('Manual update test error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// Fix corrupted sharedEarnings by recalculating from packages
+router.post('/fix-shared-earnings', auth, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    
+    // Get all claimed packages
+    const claimedPackages = await Package.find({ 
+      user: userId, 
+      claimed: true 
+    });
+    
+    // Calculate correct sharedEarnings from packages
+    let correctSharedEarnings = 0;
+    const packageDetails = [];
+    const suspiciousPackages = [];
+    
+    for (const pkg of claimedPackages) {
+      const totalEarnings = pkg.totalEarnings || 0;
+      
+      // Check for suspicious values
+      if (pkg.amount > 1000000 || totalEarnings > 1000000) { // More than ₱1M
+        suspiciousPackages.push({
+          packageId: pkg._id,
+          packageType: pkg.packageType,
+          amount: pkg.amount,
+          totalEarnings: pkg.totalEarnings,
+          reason: 'Suspiciously large values'
+        });
+      }
+      
+      // Validate earnings calculation
+      let expectedEarnings;
+      if (pkg.packageType === 1) {
+        const baseAmount = 100;
+        const baseTotal = 120;
+        const multiplier = pkg.amount / baseAmount;
+        expectedEarnings = baseTotal * multiplier;
+      } else if (pkg.packageType === 2) {
+        const baseAmount = 500;
+        const baseTotal = 750;
+        const multiplier = pkg.amount / baseAmount;
+        expectedEarnings = baseTotal * multiplier;
+      } else if (pkg.packageType === 3) {
+        const baseAmount = 1000;
+        const baseTotal = 3000;
+        const multiplier = pkg.amount / baseAmount;
+        expectedEarnings = baseTotal * multiplier;
+      }
+      
+      // Use expected earnings if current earnings seem wrong
+      const finalEarnings = (totalEarnings > expectedEarnings * 2 || totalEarnings < expectedEarnings * 0.5) 
+        ? expectedEarnings 
+        : totalEarnings;
+      
+      correctSharedEarnings += finalEarnings;
+      
+      packageDetails.push({
+        packageId: pkg._id,
+        packageType: pkg.packageType,
+        amount: pkg.amount,
+        originalTotalEarnings: pkg.totalEarnings,
+        correctedTotalEarnings: finalEarnings,
+        expectedEarnings: expectedEarnings,
+        wasCorrected: finalEarnings !== totalEarnings,
+        claimed: pkg.claimed
+      });
+    }
+    
+    // Get current user data
+    const user = await User.findById(userId);
+    const oldSharedEarnings = user.sharedEarnings || 0;
+    
+    console.log('Fixing sharedEarnings:', {
+      userId,
+      oldValue: oldSharedEarnings,
+      newValue: correctSharedEarnings,
+      difference: correctSharedEarnings - oldSharedEarnings,
+      packagesCount: claimedPackages.length,
+      suspiciousPackages: suspiciousPackages.length
+    });
+    
+    // Update user's sharedEarnings to the correct value
+    const updateResult = await User.findByIdAndUpdate(
+      userId,
+      { $set: { sharedEarnings: correctSharedEarnings } },
+      { new: true }
+    );
+    
+    if (!updateResult) {
+      throw new Error('Failed to update user sharedEarnings');
+    }
+    
+    res.json({
+      success: true,
+      message: 'Shared earnings fixed successfully',
+      oldValue: oldSharedEarnings,
+      newValue: correctSharedEarnings,
+      difference: correctSharedEarnings - oldSharedEarnings,
+      packagesCount: claimedPackages.length,
+      packageDetails,
+      suspiciousPackages,
+      warning: suspiciousPackages.length > 0 ? 'Some packages have suspicious values' : null
+    });
+    
+  } catch (error) {
+    console.error('Fix shared earnings error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
 // Claim all matured packages
 router.post('/claim-packages', async (req, res) => {
     try {
