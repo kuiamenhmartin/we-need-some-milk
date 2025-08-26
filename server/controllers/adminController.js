@@ -179,54 +179,27 @@ exports.loadRegistration = async (req, res) => {
 };
 
 exports.loadSharedCapital = async (req, res) => {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-    
     try {
         const { userId, amount, packageType } = req.body;
-        
-        if (!userId || !amount || isNaN(amount) || amount <= 0) {
-            await session.abortTransaction();
-            return res.status(400).json({ message: 'Invalid input parameters' });
-        }
-
-        const user = await User.findById(userId).session(session);
+        const user = await User.findById(userId);
         if (!user) {
-            await session.abortTransaction();
             return res.status(404).json({ message: 'User not found' });
         }
 
         // Create investment
         await new Investment({
             user: userId,
-            amount: parseFloat(amount),
+            amount: amount,
             package: packageType,
             status: 'active',
             startDate: new Date(),
             endDate: new Date(Date.now() + (packageType === 1 ? 12 : packageType === 2 ? 20 : 30) * 24 * 60 * 60 * 1000)
-        }).save({ session });
+        }).save();
 
-        // Update user's wallet balance
-        user.wallet += parseFloat(amount);
-        await user.save({ session });
-
-        await session.commitTransaction();
-        
-        res.json({ 
-            success: true,
-            message: 'Shared capital loaded successfully',
-            newBalance: user.wallet
-        });
+        res.json({ message: 'Shared capital loaded successfully' });
     } catch (error) {
-        await session.abortTransaction();
         console.error('Error loading shared capital:', error);
-        res.status(500).json({ 
-            success: false,
-            message: 'Error loading shared capital',
-            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
-        });
-    } finally {
-        session.endSession();
+        res.status(500).json({ message: 'Error loading shared capital' });
     }
 };
 
