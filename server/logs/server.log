@@ -5923,3 +5923,5 @@
 2025-08-16T05:03:13.074Z - Error claiming earnings: ReferenceError: totalEarnings is not defined
 2025-08-16T05:13:19.632Z - Error claiming earnings: ReferenceError: user is not defined
 2025-08-16T05:13:19.654Z - Error details: [object Object]
+2025-08-26T10:54:11.484Z - Unhandled Rejection at: [object Promise] reason: ReferenceError: mongoose is not defined
+2025-08-26T10:55:38.585Z - Unhandled Rejection at: [object Promise] reason: ReferenceError: mongoose is not defined

@@ -196,38 +196,56 @@ router.put('/settings', adminController.updateSettings);
 
 // Load shared capital to agent account
 router.post('/load-capital', [auth, adminAuth], async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  
   try {
     const { username, amount } = req.body;
-
-    // Validate input
-    if (!username || !amount || amount < 100) {
+    
+    // Input validation
+    if (!username || !amount || isNaN(amount) || amount < 100) {
+      await session.abortTransaction();
       return res.status(400).json({ message: 'Invalid input. Amount must be at least 100 points.' });
     }
 
-    // Find the agent by username
-    const agent = await User.findOne({ username });
+    // Find agent and update wallet in transaction
+    const agent = await User.findOne({ username }).session(session);
     if (!agent) {
+      await session.abortTransaction();
       return res.status(404).json({ message: 'Agent not found' });
     }
 
-    // Update agent's wallet
-    agent.wallet += amount;
-    await agent.save();
+    const pointsToAdd = Number(amount);
+    agent.wallet = (agent.wallet || 0) + pointsToAdd;
+    await agent.save({ session });
 
-    // Log the transaction
-    await SharedCapitalTransaction.create({
+    // Log transaction in the same transaction
+    await SharedCapitalTransaction.create([{
       user: agent._id,
       type: 'deposit',
-      amount,
+      amount: pointsToAdd,
       package: 'N/A',
-      description: `Admin loaded ${amount} points to agent (${agent.username})`,
+      description: `Admin loaded ${pointsToAdd} points to agent (${agent.username})`,
       status: 'completed'
-    });
+    }], { session });
 
-    res.json({ message: 'Shared capital loaded successfully', newBalance: agent.wallet });
+    await session.commitTransaction();
+    res.json({ 
+      success: true,
+      message: 'Shared capital loaded successfully',
+      newBalance: agent.wallet,
+      pointsAdded: pointsToAdd
+    });
   } catch (error) {
+    await session.abortTransaction();
     console.error('Error loading shared capital:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Error loading shared capital',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  } finally {
+    session.endSession();
   }
 });
 
