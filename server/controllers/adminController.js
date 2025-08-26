@@ -196,10 +196,20 @@ exports.loadSharedCapital = async (req, res) => {
             endDate: new Date(Date.now() + (packageType === 1 ? 12 : packageType === 2 ? 20 : 30) * 24 * 60 * 60 * 1000)
         }).save();
 
-        res.json({ message: 'Shared capital loaded successfully' });
+        // Update user's wallet balance
+        user.wallet += parseFloat(amount);
+        await user.save();
+
+        res.json({ 
+            message: 'Shared capital loaded successfully',
+            newBalance: user.wallet
+        });
     } catch (error) {
         console.error('Error loading shared capital:', error);
-        res.status(500).json({ message: 'Error loading shared capital' });
+        res.status(500).json({ 
+            message: 'Error loading shared capital', 
+            error: error.message 
+        });
     }
 };
 
