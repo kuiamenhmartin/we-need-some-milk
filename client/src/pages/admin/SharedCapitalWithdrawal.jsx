@@ -47,7 +47,7 @@ export default function SharedCapitalWithdrawal() {
 
   const filteredWithdrawals = withdrawals.filter(withdrawal => {
     const matchesSearch = !searchEmail || 
-      (withdrawal.agentId?.email || '').toLowerCase().includes(searchEmail.toLowerCase());
+      (withdrawal.user?.email || '').toLowerCase().includes(searchEmail.toLowerCase());
     const matchesFilter = filter === 'all' || withdrawal.status === filter;
     return matchesSearch && matchesFilter;
   });
@@ -77,12 +77,6 @@ export default function SharedCapitalWithdrawal() {
     try {
       const response = await axios.get('/admin/withdrawals/shared');
       console.log('Fetched shared capital withdrawals:', response.data);
-      if (response.data.length > 0) {
-        console.log('Sample withdrawal data:', response.data[0]);
-        console.log('Account name:', response.data[0].accountName);
-        console.log('Method:', response.data[0].method);
-        console.log('Account number:', response.data[0].accountNumber);
-      }
       setWithdrawals(response.data);
     } catch (error) {
       toast({
@@ -143,10 +137,8 @@ export default function SharedCapitalWithdrawal() {
         return '12 Days';
       case 2:
         return '20 Days';
-      case 3:
-        return '30 Days';
       default:
-        return 'N/A';
+        return 'Unknown';
     }
   };
 
@@ -297,8 +289,8 @@ export default function SharedCapitalWithdrawal() {
                       <Th color="hsl(220, 14%, 90%)" textAlign="left" px={4} py={3}>Package</Th>
                       <Th color="hsl(220, 14%, 90%)" textAlign="left" px={4} py={3}>Amount</Th>
                       <Th color="hsl(220, 14%, 90%)" textAlign="left" px={4} py={3}>Payment</Th>
-                      <Th color="hsl(220, 14%, 90%)" textAlign="left" px={4} py={3}>Date</Th>
                       <Th color="hsl(220, 14%, 90%)" textAlign="left" px={4} py={3}>Status</Th>
+                      <Th color="hsl(220, 14%, 90%)" textAlign="left" px={4} py={3}>Date</Th>
                       <Th color="hsl(220, 14%, 90%)" textAlign="center" px={4} py={3}>Actions</Th>
                     </Tr>
                   </Thead>
@@ -322,36 +314,35 @@ export default function SharedCapitalWithdrawal() {
                           <Td color="hsl(220, 14%, 90%)" verticalAlign="middle" px={4} py={3}>
                             <VStack align="start" spacing={0}>
                               <Text fontWeight="bold" fontSize="md" color="#FDB137">
-                                {withdrawal.agentId?.username || 'N/A'}
+                                {withdrawal.user?.username || 'N/A'}
                               </Text>
                               <Text fontSize="sm" color="hsl(220, 14%, 70%)">
-                                {withdrawal.agentId?.email || 'N/A'}
+                                {withdrawal.user?.email || 'N/A'}
                               </Text>
                             </VStack>
                           </Td>
                           <Td verticalAlign="middle" px={4} py={3}>
-                            <Badge colorScheme="purple" fontSize="xs" px={2} py={1}>
-                              {getPackageLabel(withdrawal.packageType || 1)}
-                            </Badge>
+                            <Tooltip label={`Package Type ${withdrawal.packageType}`} hasArrow>
+                              <Badge colorScheme="purple" fontSize="xs" px={2} py={1}>
+                                {getPackageLabel(withdrawal.packageType)}
+                              </Badge>
+                            </Tooltip>
                           </Td>
                           <Td color="#FDB137" fontWeight="bold" verticalAlign="middle" px={4} py={3}>
                             ₱{withdrawal.amount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </Td>
                           <Td verticalAlign="middle" px={4} py={3}>
                             <VStack align="start" spacing={0}>
-                              <Text fontSize="sm" color="hsl(220, 14%, 90%)" textTransform="uppercase">
+                              <Text color="hsl(220, 14%, 90%)" fontSize="sm">
                                 {withdrawal.method || 'N/A'}
                               </Text>
-                              <Text fontSize="sm" color="hsl(220, 14%, 70%)">
+                              <Text fontSize="xs" color="hsl(220, 14%, 70%)">
                                 {withdrawal.accountNumber || 'N/A'}
                               </Text>
-                              <Text fontSize="sm" color="#FDB137" fontWeight="bold">
+                              <Text fontSize="xs" color="hsl(220, 14%, 70%)">
                                 {withdrawal.accountName || 'N/A'}
                               </Text>
                             </VStack>
-                          </Td>
-                          <Td color="hsl(220, 14%, 80%)" fontSize="sm" verticalAlign="middle" px={4} py={3}>
-                            {new Date(withdrawal.createdAt).toLocaleString()}
                           </Td>
                           <Td verticalAlign="middle" px={4} py={3}>
                             <Badge 
@@ -364,6 +355,9 @@ export default function SharedCapitalWithdrawal() {
                             >
                               {withdrawal.status}
                             </Badge>
+                          </Td>
+                          <Td color="hsl(220, 14%, 80%)" fontSize="sm" verticalAlign="middle" px={4} py={3}>
+                            {new Date(withdrawal.createdAt).toLocaleString()}
                           </Td>
                           <Td verticalAlign="middle" px={4} py={3}>
                             {withdrawal.status === 'pending' ? (

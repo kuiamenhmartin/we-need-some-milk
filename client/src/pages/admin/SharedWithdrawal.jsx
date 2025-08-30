@@ -286,7 +286,7 @@ export default function SharedWithdrawal() {
                           <Td color="hsl(220, 14%, 90%)" verticalAlign="middle" px={4} py={3}>
                             <VStack align="start" spacing={0}>
                               <Text fontWeight="bold" fontSize="md" color="#FDB137">
-                                {withdrawal.agentId?.username || 'N/A'}
+                                {withdrawal.agentId?.username || 'Unknown User'}
                               </Text>
                               <Text fontSize="sm" color="hsl(220, 14%, 70%)">
                                 {withdrawal.agentId?.email || 'N/A'}
@@ -309,13 +309,13 @@ export default function SharedWithdrawal() {
                           </Td>
                           <Td verticalAlign="middle" px={4} py={3}>
                             <VStack align="start" spacing={0}>
-                              <Text color="hsl(220, 14%, 90%)" fontSize="sm" textTransform="uppercase">
+                              <Text color="hsl(220, 14%, 90%)" fontSize="sm">
                                 {withdrawal.method || 'N/A'}
                               </Text>
                               <Text fontSize="xs" color="hsl(220, 14%, 70%)">
                                 {withdrawal.accountNumber || 'N/A'}
                               </Text>
-                              <Text fontSize="xs" color="#FDB137" fontWeight="bold">
+                              <Text fontSize="xs" color="hsl(220, 14%, 70%)">
                                 {withdrawal.accountName || 'N/A'}
                               </Text>
                             </VStack>
