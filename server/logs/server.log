@@ -5932,3 +5932,7 @@
 2025-08-26T11:26:22.223Z - Unhandled Rejection at: [object Promise] reason: ReferenceError: mongoose is not defined
 2025-08-26T11:47:50.754Z - Unhandled Rejection at: [object Promise] reason: ReferenceError: mongoose is not defined
 2025-08-26T11:52:49.735Z - Unhandled Rejection at: [object Promise] reason: ReferenceError: mongoose is not defined
+2025-08-30T06:13:26.477Z - MongoDB connection error: Error: querySrv ECONNREFUSED _mongodb._tcp.cluster0.o7yokb3.mongodb.net
+2025-08-30T06:13:27.000Z - MongoDB connection error: Error: querySrv ECONNREFUSED _mongodb._tcp.cluster0.o7yokb3.mongodb.net
+2025-08-30T06:13:27.785Z - MongoDB connection error: Error: querySrv ECONNREFUSED _mongodb._tcp.cluster0.o7yokb3.mongodb.net
+2025-08-30T06:13:28.340Z - MongoDB connection error: Error: querySrv ECONNREFUSED _mongodb._tcp.cluster0.o7yokb3.mongodb.net

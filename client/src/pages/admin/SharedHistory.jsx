@@ -88,6 +88,7 @@ const SharedHistory = () => {
   const filteredTransactions = transactions.filter(transaction => {
     const matchesFilter = filter === 'all' || transaction.status === filter;
     const matchesSearch = search === '' || 
+      (transaction.accountName || '').toLowerCase().includes(search.toLowerCase()) ||
       (transaction.agentId?.username || '').toLowerCase().includes(search.toLowerCase()) ||
       (transaction.agentId?.email || '').toLowerCase().includes(search.toLowerCase());
     return matchesFilter && matchesSearch;
@@ -222,7 +223,7 @@ const SharedHistory = () => {
                       <FaSearch color="#FDB137" />
                     </InputLeftElement>
                     <Input
-                      placeholder="Search by username or email"
+                      placeholder="Search by name, username or email"
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
                       bg="#242C2E"
@@ -348,7 +349,7 @@ const SharedHistory = () => {
                           <Td color="hsl(220, 14%, 90%)" verticalAlign="middle" px={4} py={3}>
                             <VStack align="start" spacing={0}>
                               <Text fontWeight="bold" fontSize="md" color="#FDB137">
-                                {transaction.agentId?.username || 'Unknown User'}
+                                {transaction.accountName || transaction.agentId?.username || 'N/A'}
                               </Text>
                               <Text fontSize="sm" color="hsl(220, 14%, 70%)">
                                 {transaction.agentId?.email || 'N/A'}

@@ -391,6 +391,9 @@ exports.getSharedWithdrawals = async (req, res) => {
         if (withdrawals.length > 0) {
             console.log('Sample withdrawal:', JSON.stringify(withdrawals[0], null, 2));
             console.log('Sample agentId:', withdrawals[0].agentId);
+            console.log('Account name field:', withdrawals[0].accountName);
+            console.log('Method field:', withdrawals[0].method);
+            console.log('Account number field:', withdrawals[0].accountNumber);
         }
         res.json(withdrawals);
     } catch (error) {
