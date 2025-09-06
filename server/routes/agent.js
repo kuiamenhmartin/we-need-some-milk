@@ -272,6 +272,9 @@ router.post('/packages/activate', auth, async (req, res) => {
 // Claim matured package earnings
 router.post('/packages/claim', agentController.claimMaturedPackage);
 
+// Rollover matured package to higher tier
+router.post('/packages/rollover', agentController.rolloverPackage);
+
 // Test endpoint to check all packages for the current user
 router.get('/test-packages', async (req, res) => {
   try {

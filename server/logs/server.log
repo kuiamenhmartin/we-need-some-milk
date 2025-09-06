@@ -5936,3 +5936,15 @@
 2025-08-30T06:13:27.000Z - MongoDB connection error: Error: querySrv ECONNREFUSED _mongodb._tcp.cluster0.o7yokb3.mongodb.net
 2025-08-30T06:13:27.785Z - MongoDB connection error: Error: querySrv ECONNREFUSED _mongodb._tcp.cluster0.o7yokb3.mongodb.net
 2025-08-30T06:13:28.340Z - MongoDB connection error: Error: querySrv ECONNREFUSED _mongodb._tcp.cluster0.o7yokb3.mongodb.net
+2025-09-03T00:44:56.113Z - MongoDB connection error: Error: querySrv ETIMEOUT _mongodb._tcp.cluster0.o7yokb3.mongodb.net
+2025-09-03T00:44:56.119Z - MongoDB connection error: Error: querySrv ETIMEOUT _mongodb._tcp.cluster0.o7yokb3.mongodb.net
+2025-09-03T00:45:06.156Z - Error fixing dailyClicks format: MongoServerSelectionError: getaddrinfo ENOTFOUND ac-ecnuqgh-shard-00-02.o7yokb3.mongodb.net
+2025-09-03T00:45:21.303Z - MongoDB connection error: Error: querySrv ETIMEOUT _mongodb._tcp.cluster0.o7yokb3.mongodb.net
+2025-09-03T00:45:21.359Z - MongoDB connection error: Error: querySrv ETIMEOUT _mongodb._tcp.cluster0.o7yokb3.mongodb.net
+2025-09-03T00:45:31.375Z - Error fixing dailyClicks format: MongoServerSelectionError: getaddrinfo ENOTFOUND ac-ecnuqgh-shard-00-02.o7yokb3.mongodb.net
+2025-09-03T00:45:46.447Z - MongoDB connection error: Error: querySrv ETIMEOUT _mongodb._tcp.cluster0.o7yokb3.mongodb.net
+2025-09-03T00:45:46.467Z - MongoDB connection error: Error: querySrv ETIMEOUT _mongodb._tcp.cluster0.o7yokb3.mongodb.net
+2025-09-03T00:45:56.490Z - Error fixing dailyClicks format: MongoServerSelectionError: getaddrinfo ENOTFOUND ac-ecnuqgh-shard-00-02.o7yokb3.mongodb.net
+2025-09-03T00:46:13.581Z - MongoDB connection error: Error: querySrv ETIMEOUT _mongodb._tcp.cluster0.o7yokb3.mongodb.net
+2025-09-03T00:46:13.595Z - MongoDB connection error: Error: querySrv ETIMEOUT _mongodb._tcp.cluster0.o7yokb3.mongodb.net
+2025-09-06T06:48:19.063Z - Error in rollover package: ValidationError: type: `rollover` is not a valid enum value for path `type`.

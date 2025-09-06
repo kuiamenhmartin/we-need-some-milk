@@ -14,9 +14,20 @@ import {
   useToast,
   Icon,
   Flex,
-  Image
+  Image,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  ModalCloseButton,
+  useDisclosure,
+  RadioGroup,
+  Radio,
+  Stack
 } from '@chakra-ui/react';
-import { FaWallet, FaUsers, FaChartLine, FaGift } from 'react-icons/fa';
+import { FaWallet, FaUsers, FaChartLine, FaGift, FaExchangeAlt } from 'react-icons/fa';
 import AgentLayout from '../../components/AgentLayout';
 import axios from 'axios';
 import ClickingTask from '../../components/ClickingTask';
@@ -183,6 +194,10 @@ export default function Dashboard() {
   const [maxClicks, setMaxClicks] = useState(50);
   const [maxReward, setMaxReward] = useState(10);
   const [clickingTaskActivated, setClickingTaskActivated] = useState(false);
+  const [selectedPackageForRollover, setSelectedPackageForRollover] = useState(null);
+  const [selectedTargetPackage, setSelectedTargetPackage] = useState('');
+  const [isRolloverLoading, setIsRolloverLoading] = useState(false);
+  const { isOpen: isRolloverOpen, onOpen: onRolloverOpen, onClose: onRolloverClose } = useDisclosure();
   const toast = useToast();
 
   useEffect(() => {
@@ -349,6 +364,73 @@ export default function Dashboard() {
     }
   };
 
+  const handleRolloverClick = (pkg) => {
+    setSelectedPackageForRollover(pkg);
+    setSelectedTargetPackage('');
+    onRolloverOpen();
+  };
+
+  const handleRolloverConfirm = async () => {
+    if (!selectedPackageForRollover || !selectedTargetPackage) {
+      toast({
+        title: 'Selection Required',
+        description: 'Please select a target package for rollover',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+
+    setIsRolloverLoading(true);
+    try {
+      const response = await axios.post('/agent/packages/rollover', {
+        packageId: selectedPackageForRollover._id,
+        targetPackageType: parseInt(selectedTargetPackage)
+      });
+
+      toast({
+        title: 'Rollover Successful',
+        description: `Successfully rolled over Package ${selectedPackageForRollover.packageType} to Package ${selectedTargetPackage}`,
+        status: 'success',
+        duration: 5000,
+        isClosable: true,
+      });
+
+      onRolloverClose();
+      setSelectedPackageForRollover(null);
+      setSelectedTargetPackage('');
+      
+      // Refresh dashboard data to update stats and package list
+      fetchData();
+    } catch (error) {
+      console.error('Error rolling over package:', error);
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to rollover package',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setIsRolloverLoading(false);
+    }
+  };
+
+  const getAvailableRolloverOptions = (currentPackageType) => {
+    const options = [];
+    if (currentPackageType < 2) {
+      options.push({ value: '2', label: 'Package 2 (20 days)', description: 'Higher returns, longer duration' });
+    }
+    if (currentPackageType < 3) {
+      options.push({ value: '3', label: 'Package 3 (30 days)', description: 'Highest returns, longest duration' });
+    }
+    if (currentPackageType === 3) {
+      options.push({ value: '3', label: 'Package 3 (30 days)', description: 'Reinvest in Package 3 for continued growth' });
+    }
+    return options;
+  };
+
   return (
     <AgentLayout>
       <Container maxW="7xl">
@@ -498,25 +580,47 @@ export default function Dashboard() {
                         </Flex>
                       </Box>
                       {pkg.isMatured ? (
-                      <Button
-                        mt={2}
-                        size="sm"
-                        leftIcon={<FaGift />}
-                        bg="#FDB137"
-                        color="#181E20"
-                        fontWeight="bold"
-                        _hover={{
-                          bg: '#BD5301',
-                          color: 'white',
-                          transform: 'scale(1.08)',
-                          boxShadow: '0 0 10px #FDB137',
-                        }}
-                        transition="all 0.2s"
-                        onClick={() => handleClaimPackage(pkg._id)}
-                        title="Claim your matured package earnings!"
-                      >
-                        Claim
-                      </Button>
+                        <Flex gap={2} mt={2}>
+                          <Button
+                            size="sm"
+                            leftIcon={<FaGift />}
+                            bg="#FDB137"
+                            color="#181E20"
+                            fontWeight="bold"
+                            _hover={{
+                              bg: '#BD5301',
+                              color: 'white',
+                              transform: 'scale(1.08)',
+                              boxShadow: '0 0 10px #FDB137',
+                            }}
+                            transition="all 0.2s"
+                            onClick={() => handleClaimPackage(pkg._id)}
+                            title="Claim your matured package earnings!"
+                            flex={1}
+                          >
+                            Claim
+                          </Button>
+                          {getAvailableRolloverOptions(pkg.packageType).length > 0 && (
+                            <Button
+                              size="sm"
+                              leftIcon={<FaExchangeAlt />}
+                              bg="#48BB78"
+                              color="white"
+                              fontWeight="bold"
+                              _hover={{
+                                bg: '#38A169',
+                                transform: 'scale(1.08)',
+                                boxShadow: '0 0 10px #48BB78',
+                              }}
+                              transition="all 0.2s"
+                              onClick={() => handleRolloverClick(pkg)}
+                              title="Rollover to a higher tier package!"
+                              flex={1}
+                            >
+                              Rollover
+                            </Button>
+                          )}
+                        </Flex>
                       ) : (
                         <Button
                           mt={2}
@@ -571,6 +675,116 @@ export default function Dashboard() {
             />
           </SimpleGrid>
         </Box>
+
+        {/* Rollover Modal */}
+        <Modal isOpen={isRolloverOpen} onClose={onRolloverClose} size="md">
+          <ModalOverlay />
+          <ModalContent bg="#1E2528" borderWidth="1px" borderColor="gray.700">
+            <ModalHeader color="white" fontFamily="'Montserrat', sans-serif">
+              Rollover Package
+            </ModalHeader>
+            <ModalCloseButton color="white" />
+            <ModalBody>
+              {selectedPackageForRollover && (
+                <VStack spacing={4} align="stretch">
+                  <Box>
+                    <Text color="gray.400" fontSize="sm" mb={2}>
+                      Current Package Details:
+                    </Text>
+                    <Card bg="#181E20" borderWidth="1px" borderColor="gray.600">
+                      <CardBody p={3}>
+                        <VStack spacing={2} align="start">
+                          <Flex justify="space-between" width="100%">
+                            <Text color="gray.400" fontSize="xs">Package Type</Text>
+                            <Badge bg="#FDB137" color="#181E20" fontSize="xs">
+                              PKG {selectedPackageForRollover.packageType}
+                            </Badge>
+                          </Flex>
+                          <Flex justify="space-between" width="100%">
+                            <Text color="gray.400" fontSize="xs">Investment</Text>
+                            <Text color="white" fontSize="sm">₱{selectedPackageForRollover.amount.toLocaleString()}</Text>
+                          </Flex>
+                          <Flex justify="space-between" width="100%">
+                            <Text color="gray.400" fontSize="xs">Total Earnings</Text>
+                            <Text color="#FDB137" fontSize="sm" fontWeight="bold">₱{selectedPackageForRollover.totalEarnings.toLocaleString()}</Text>
+                          </Flex>
+                        </VStack>
+                      </CardBody>
+                    </Card>
+                  </Box>
+
+                  <Box>
+                    <Text color="gray.400" fontSize="sm" mb={3}>
+                      Select Target Package:
+                    </Text>
+                    <RadioGroup value={selectedTargetPackage} onChange={setSelectedTargetPackage}>
+                      <Stack spacing={3}>
+                        {getAvailableRolloverOptions(selectedPackageForRollover.packageType).map((option) => (
+                          <Card 
+                            key={option.value}
+                            bg={selectedTargetPackage === option.value ? "#2D3748" : "#181E20"}
+                            borderWidth="1px"
+                            borderColor={selectedTargetPackage === option.value ? "#48BB78" : "gray.600"}
+                            cursor="pointer"
+                            _hover={{ borderColor: "#48BB78" }}
+                            transition="all 0.2s"
+                          >
+                            <CardBody p={3}>
+                              <Flex align="center" gap={3}>
+                                <Radio 
+                                  value={option.value} 
+                                  colorScheme="green"
+                                  size="lg"
+                                />
+                                <VStack align="start" spacing={1} flex={1}>
+                                  <Text color="white" fontWeight="bold" fontSize="sm">
+                                    {option.label}
+                                  </Text>
+                                  <Text color="gray.400" fontSize="xs">
+                                    {option.description}
+                                  </Text>
+                                </VStack>
+                              </Flex>
+                            </CardBody>
+                          </Card>
+                        ))}
+                      </Stack>
+                    </RadioGroup>
+                  </Box>
+
+                  <Box bg="#2D3748" p={3} borderRadius="md" borderWidth="1px" borderColor="gray.600">
+                    <Text color="gray.300" fontSize="xs" textAlign="center">
+                      <strong>Note:</strong> Your current package earnings (₱{selectedPackageForRollover.totalEarnings.toLocaleString()}) will be used as the investment amount for the new package.
+                    </Text>
+                  </Box>
+                </VStack>
+              )}
+            </ModalBody>
+            <ModalFooter>
+              <Button 
+                variant="ghost" 
+                mr={3} 
+                onClick={onRolloverClose}
+                color="gray.400"
+                _hover={{ color: "white" }}
+              >
+                Cancel
+              </Button>
+              <Button 
+                bg="#48BB78" 
+                color="white"
+                _hover={{ bg: '#38A169' }}
+                onClick={handleRolloverConfirm}
+                isLoading={isRolloverLoading}
+                loadingText="Processing..."
+                isDisabled={!selectedTargetPackage || isRolloverLoading}
+                leftIcon={<FaExchangeAlt />}
+              >
+                Confirm Rollover
+              </Button>
+            </ModalFooter>
+          </ModalContent>
+        </Modal>
       </Container>
     </AgentLayout>
   );

@@ -8,7 +8,7 @@ const sharedCapitalTransactionSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['deposit', 'earning', 'withdrawal'],
+    enum: ['deposit', 'earning', 'withdrawal', 'rollover'],
     required: true
   },
   amount: {

@@ -1481,3 +1481,187 @@ exports.getActivePackages = async (req, res) => {
         res.status(500).json({ message: 'Error fetching active packages' });
     }
 };
+
+// Rollover matured package to a higher tier package
+exports.rolloverPackage = async (req, res) => {
+    try {
+        const { packageId, targetPackageType } = req.body;
+        const userId = req.user._id;
+
+        console.log('Rollover request:', { packageId, targetPackageType, userId });
+
+        // Validate input
+        if (!packageId || !targetPackageType) {
+            return res.status(400).json({ 
+                success: false,
+                message: 'Package ID and target package type are required' 
+            });
+        }
+
+        if (![1, 2, 3].includes(targetPackageType)) {
+            return res.status(400).json({ 
+                success: false,
+                message: 'Invalid target package type' 
+            });
+        }
+
+        // Find the package to rollover
+        const pkg = await Package.findOne({
+            _id: packageId,
+            user: userId,
+            $or: [
+                { status: 'active' },
+                { status: 'completed' }
+            ]
+        });
+
+        if (!pkg) {
+            return res.status(404).json({ 
+                success: false,
+                message: 'Package not found or not available for rollover' 
+            });
+        }
+
+        // Check if package is matured
+        const now = new Date();
+        const packageEndDate = new Date(pkg.endDate);
+        if (now < packageEndDate) {
+            return res.status(400).json({ 
+                success: false,
+                message: 'Package has not matured yet' 
+            });
+        }
+
+        // Check if already claimed
+        if (pkg.claimed) {
+            return res.status(400).json({ 
+                success: false,
+                message: 'Package has already been claimed' 
+            });
+        }
+
+        // Validate rollover eligibility
+        if (pkg.packageType > targetPackageType) {
+            return res.status(400).json({ 
+                success: false,
+                message: 'Can only rollover to the same or higher tier package' 
+            });
+        }
+
+        // Calculate the total earnings from the matured package
+        let totalEarnings;
+        if (pkg.packageType === 1) {
+            const baseAmount = 100;
+            const baseTotal = 120;
+            const multiplier = pkg.amount / baseAmount;
+            totalEarnings = parseFloat((baseTotal * multiplier).toFixed(2));
+        } else if (pkg.packageType === 2) {
+            const baseAmount = 500;
+            const baseTotal = 750;
+            const multiplier = pkg.amount / baseAmount;
+            totalEarnings = parseFloat((baseTotal * multiplier).toFixed(2));
+        } else if (pkg.packageType === 3) {
+            const baseAmount = 1000;
+            const baseTotal = 3000;
+            const multiplier = pkg.amount / baseAmount;
+            totalEarnings = parseFloat((baseTotal * multiplier).toFixed(2));
+        }
+
+        // Calculate new package details
+        let newAmount, newDailyIncome, newTotalDays;
+        const startDate = new Date();
+        
+        if (targetPackageType === 1) {
+            newTotalDays = 12;
+            newAmount = totalEarnings; // Use the total earnings as the new investment
+            newDailyIncome = parseFloat((newAmount * 1.667 / 100).toFixed(2)); // Scale based on new amount
+        } else if (targetPackageType === 2) {
+            newTotalDays = 20;
+            newAmount = totalEarnings;
+            newDailyIncome = parseFloat((newAmount * 12.5 / 500).toFixed(2)); // Scale based on new amount
+        } else if (targetPackageType === 3) {
+            newTotalDays = 30;
+            newAmount = totalEarnings;
+            newDailyIncome = parseFloat((newAmount * 100 / 1000).toFixed(2)); // Scale based on new amount
+        }
+
+        const newEndDate = new Date(startDate.getTime() + (newTotalDays * 24 * 60 * 60 * 1000));
+
+        // Mark the original package as claimed
+        pkg.claimed = true;
+        pkg.claimedAt = now;
+        pkg.status = 'completed';
+        pkg.totalEarnings = totalEarnings;
+        await pkg.save();
+
+        // Create new package
+        const newPackage = new Package({
+            user: userId,
+            packageType: targetPackageType,
+            amount: newAmount,
+            status: 'active',
+            startDate: startDate,
+            endDate: newEndDate,
+            dailyIncome: newDailyIncome,
+            totalEarnings: 0,
+            claimed: false
+        });
+
+        await newPackage.save();
+
+        // Create transaction record for rollover
+        const transaction = new SharedCapitalTransaction({
+            user: userId,
+            type: 'rollover',
+            amount: totalEarnings,
+            package: `Rollover from Package ${pkg.packageType} to Package ${targetPackageType}`,
+            status: 'completed',
+            description: `Rolled over Package ${pkg.packageType} (₱${pkg.amount.toLocaleString()}) to Package ${targetPackageType} (₱${newAmount.toLocaleString()})`
+        });
+        await transaction.save();
+
+        console.log('Rollover completed successfully:', {
+            originalPackage: {
+                id: pkg._id,
+                type: pkg.packageType,
+                amount: pkg.amount,
+                earnings: totalEarnings
+            },
+            newPackage: {
+                id: newPackage._id,
+                type: targetPackageType,
+                amount: newAmount,
+                dailyIncome: newDailyIncome,
+                totalDays: newTotalDays
+            }
+        });
+
+        res.json({
+            success: true,
+            message: `Successfully rolled over Package ${pkg.packageType} to Package ${targetPackageType}`,
+            originalPackage: {
+                id: pkg._id,
+                type: pkg.packageType,
+                amount: pkg.amount,
+                earnings: totalEarnings
+            },
+            newPackage: {
+                id: newPackage._id,
+                type: targetPackageType,
+                amount: newAmount,
+                dailyIncome: newDailyIncome,
+                totalDays: newTotalDays,
+                startDate: startDate,
+                endDate: newEndDate
+            }
+        });
+
+    } catch (error) {
+        console.error('Error in rollover package:', error);
+        res.status(500).json({ 
+            success: false,
+            message: 'Error processing rollover',
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+        });
+    }
+};
