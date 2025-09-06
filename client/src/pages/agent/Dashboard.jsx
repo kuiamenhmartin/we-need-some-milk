@@ -417,17 +417,27 @@ export default function Dashboard() {
     }
   };
 
-  const getAvailableRolloverOptions = (currentPackageType) => {
+  const getAvailableRolloverOptions = (currentPackageType, totalEarnings) => {
     const options = [];
-    if (currentPackageType < 2) {
+    
+    // Package 1 can rollover to Package 2 or 3 if earnings meet minimum requirements
+    if (currentPackageType < 2 && totalEarnings >= 500) {
       options.push({ value: '2', label: 'Package 2 (20 days)', description: 'Higher returns, longer duration' });
     }
-    if (currentPackageType < 3) {
+    if (currentPackageType < 3 && totalEarnings >= 1000) {
       options.push({ value: '3', label: 'Package 3 (30 days)', description: 'Highest returns, longest duration' });
     }
+    
+    // Package 2 can rollover to Package 3 if earnings meet minimum requirements
+    if (currentPackageType === 2 && totalEarnings >= 1000) {
+      options.push({ value: '3', label: 'Package 3 (30 days)', description: 'Highest returns, longest duration' });
+    }
+    
+    // Package 3 can always rollover to Package 3 (no minimum requirement)
     if (currentPackageType === 3) {
       options.push({ value: '3', label: 'Package 3 (30 days)', description: 'Reinvest in Package 3 for continued growth' });
     }
+    
     return options;
   };
 
@@ -600,7 +610,7 @@ export default function Dashboard() {
                           >
                             Claim
                           </Button>
-                          {getAvailableRolloverOptions(pkg.packageType).length > 0 && (
+                          {getAvailableRolloverOptions(pkg.packageType, pkg.totalEarnings).length > 0 && (
                             <Button
                               size="sm"
                               leftIcon={<FaExchangeAlt />}
@@ -717,39 +727,53 @@ export default function Dashboard() {
                     <Text color="gray.400" fontSize="sm" mb={3}>
                       Select Target Package:
                     </Text>
-                    <RadioGroup value={selectedTargetPackage} onChange={setSelectedTargetPackage}>
-                      <Stack spacing={3}>
-                        {getAvailableRolloverOptions(selectedPackageForRollover.packageType).map((option) => (
-                          <Card 
-                            key={option.value}
-                            bg={selectedTargetPackage === option.value ? "#2D3748" : "#181E20"}
-                            borderWidth="1px"
-                            borderColor={selectedTargetPackage === option.value ? "#48BB78" : "gray.600"}
-                            cursor="pointer"
-                            _hover={{ borderColor: "#48BB78" }}
-                            transition="all 0.2s"
-                          >
-                            <CardBody p={3}>
-                              <Flex align="center" gap={3}>
-                                <Radio 
-                                  value={option.value} 
-                                  colorScheme="green"
-                                  size="lg"
-                                />
-                                <VStack align="start" spacing={1} flex={1}>
-                                  <Text color="white" fontWeight="bold" fontSize="sm">
-                                    {option.label}
-                                  </Text>
-                                  <Text color="gray.400" fontSize="xs">
-                                    {option.description}
-                                  </Text>
-                                </VStack>
-                              </Flex>
-                            </CardBody>
-                          </Card>
-                        ))}
-                      </Stack>
-                    </RadioGroup>
+                    {getAvailableRolloverOptions(selectedPackageForRollover.packageType, selectedPackageForRollover.totalEarnings).length > 0 ? (
+                      <RadioGroup value={selectedTargetPackage} onChange={setSelectedTargetPackage}>
+                        <Stack spacing={3}>
+                          {getAvailableRolloverOptions(selectedPackageForRollover.packageType, selectedPackageForRollover.totalEarnings).map((option) => (
+                            <Card 
+                              key={option.value}
+                              bg={selectedTargetPackage === option.value ? "#2D3748" : "#181E20"}
+                              borderWidth="1px"
+                              borderColor={selectedTargetPackage === option.value ? "#48BB78" : "gray.600"}
+                              cursor="pointer"
+                              _hover={{ borderColor: "#48BB78" }}
+                              transition="all 0.2s"
+                            >
+                              <CardBody p={3}>
+                                <Flex align="center" gap={3}>
+                                  <Radio 
+                                    value={option.value} 
+                                    colorScheme="green"
+                                    size="lg"
+                                  />
+                                  <VStack align="start" spacing={1} flex={1}>
+                                    <Text color="white" fontWeight="bold" fontSize="sm">
+                                      {option.label}
+                                    </Text>
+                                    <Text color="gray.400" fontSize="xs">
+                                      {option.description}
+                                    </Text>
+                                  </VStack>
+                                </Flex>
+                              </CardBody>
+                            </Card>
+                          ))}
+                        </Stack>
+                      </RadioGroup>
+                    ) : (
+                      <Box bg="#2D3748" p={4} borderRadius="md" borderWidth="1px" borderColor="gray.600">
+                        <Text color="gray.300" fontSize="sm" textAlign="center">
+                          <strong>No Rollover Options Available</strong>
+                        </Text>
+                        <Text color="gray.400" fontSize="xs" textAlign="center" mt={2}>
+                          Your earnings (₱{selectedPackageForRollover.totalEarnings.toLocaleString()}) don't meet the minimum requirements for higher tier packages.
+                        </Text>
+                        <Text color="gray.400" fontSize="xs" textAlign="center" mt={1}>
+                          Package 2 requires ₱500+, Package 3 requires ₱1000+
+                        </Text>
+                      </Box>
+                    )}
                   </Box>
 
                   <Box bg="#2D3748" p={3} borderRadius="md" borderWidth="1px" borderColor="gray.600">

@@ -1567,6 +1567,21 @@ exports.rolloverPackage = async (req, res) => {
             totalEarnings = parseFloat((baseTotal * multiplier).toFixed(2));
         }
 
+        // Validate minimum amount requirements for rollover
+        if (targetPackageType === 2 && totalEarnings < 500) {
+            return res.status(400).json({ 
+                success: false,
+                message: 'Insufficient earnings for Package 2 rollover. Minimum required: ₱500' 
+            });
+        }
+        
+        if (targetPackageType === 3 && totalEarnings < 1000) {
+            return res.status(400).json({ 
+                success: false,
+                message: 'Insufficient earnings for Package 3 rollover. Minimum required: ₱1000' 
+            });
+        }
+
         // Calculate new package details
         let newAmount, newDailyIncome, newTotalDays;
         const startDate = new Date();
