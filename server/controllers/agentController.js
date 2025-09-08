@@ -1568,14 +1568,16 @@ exports.rolloverPackage = async (req, res) => {
         }
 
         // Validate minimum amount requirements for rollover
-        if (targetPackageType === 2 && totalEarnings < 500) {
+        // Require ₱500 only when moving from Package 1 to Package 2
+        if (pkg.packageType === 1 && targetPackageType === 2 && totalEarnings < 500) {
             return res.status(400).json({ 
                 success: false,
                 message: 'Insufficient earnings for Package 2 rollover. Minimum required: ₱500' 
             });
         }
-        
-        if (targetPackageType === 3 && totalEarnings < 1000) {
+
+        // Require ₱1000 only when moving to Package 3 from lower tiers (1 or 2)
+        if ((pkg.packageType === 1 || pkg.packageType === 2) && targetPackageType === 3 && totalEarnings < 1000) {
             return res.status(400).json({ 
                 success: false,
                 message: 'Insufficient earnings for Package 3 rollover. Minimum required: ₱1000' 

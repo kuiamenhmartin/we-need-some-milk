@@ -419,25 +419,33 @@ export default function Dashboard() {
 
   const getAvailableRolloverOptions = (currentPackageType, totalEarnings) => {
     const options = [];
-    
+
+    // Always allow same-tier rollover for Package 1 and Package 2
+    if (currentPackageType === 1) {
+      options.push({ value: '1', label: 'Package 1 (12 days)', description: 'Reinvest in Package 1' });
+    }
+    if (currentPackageType === 2) {
+      options.push({ value: '2', label: 'Package 2 (20 days)', description: 'Reinvest in Package 2' });
+    }
+
     // Package 1 can rollover to Package 2 or 3 if earnings meet minimum requirements
-    if (currentPackageType < 2 && totalEarnings >= 500) {
+    if (currentPackageType === 1 && totalEarnings >= 500) {
       options.push({ value: '2', label: 'Package 2 (20 days)', description: 'Higher returns, longer duration' });
     }
-    if (currentPackageType < 3 && totalEarnings >= 1000) {
+    if (currentPackageType === 1 && totalEarnings >= 1000) {
       options.push({ value: '3', label: 'Package 3 (30 days)', description: 'Highest returns, longest duration' });
     }
-    
+
     // Package 2 can rollover to Package 3 if earnings meet minimum requirements
     if (currentPackageType === 2 && totalEarnings >= 1000) {
       options.push({ value: '3', label: 'Package 3 (30 days)', description: 'Highest returns, longest duration' });
     }
-    
+
     // Package 3 can always rollover to Package 3 (no minimum requirement)
     if (currentPackageType === 3) {
       options.push({ value: '3', label: 'Package 3 (30 days)', description: 'Reinvest in Package 3 for continued growth' });
     }
-    
+
     return options;
   };
 
