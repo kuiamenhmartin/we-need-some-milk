@@ -101,25 +101,33 @@ router.post('/packages/activate', auth, async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Validate package ID and amount
-    if (packageId === 1) {
-      if (amount !== 100) {
-        return res.status(400).json({ message: 'Package 1 amount must be exactly ₱100' });
+    // Validate package ID and minimum amount based on package type
+    const packageValidations = {
+      1: {
+        minAmount: 100,
+        message: 'Package 1 amount must be at least ₱100'
+      },
+      2: {
+        minAmount: 500,
+        message: 'Package 2 amount must be at least ₱500'
+      },
+      3: {
+        minAmount: 1000,
+        message: 'Package 3 amount must be at least ₱1000'
+      },
+      4: {
+        minAmount: 1000,
+        message: 'Package 4 amount must be at least ₱1000'
       }
-    } else if (packageId === 2) {
-      if (amount !== 500) {
-        return res.status(400).json({ message: 'Package 2 amount must be exactly ₱500' });
-      }
-    } else if (packageId === 3) {
-      if (amount < 1000) {
-        return res.status(400).json({ message: 'Package 3 amount must be at least ₱1000' });
-      }
-    } else if (packageId === 4) {
-      if (amount < 1000) {
-        return res.status(400).json({ message: 'Package 4 amount must be at least ₱1000' });
-      }
-    } else {
+    };
+
+    const validation = packageValidations[packageId];
+    if (!validation) {
       return res.status(400).json({ message: 'Invalid package ID' });
+    }
+
+    if (amount < validation.minAmount) {
+      return res.status(400).json({ message: validation.message });
     }
 
     // Fetch dynamic package configurations from Settings

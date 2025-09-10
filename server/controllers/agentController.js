@@ -1682,23 +1682,17 @@ exports.handlePackage4Claim = async (req, res) => {
 // Rollover matured package to a higher tier package
 exports.rolloverPackage = async (req, res) => {
     try {
-        const { packageId, targetPackageType } = req.body;
+        const { packageId, targetPackageType, period } = req.body;
         const userId = req.user._id;
+        const isPartialRollover = pkg.packageType === 4 && pkg.canClaimPartial;
 
-        console.log('Rollover request:', { packageId, targetPackageType, userId });
+        console.log('Rollover request:', { packageId, targetPackageType, userId, period, isPartialRollover });
 
         // Validate input
         if (!packageId || !targetPackageType) {
             return res.status(400).json({ 
                 success: false,
                 message: 'Package ID and target package type are required' 
-            });
-        }
-
-        if (![1, 2, 3, 4].includes(targetPackageType)) {
-            return res.status(400).json({ 
-                success: false,
-                message: 'Invalid target package type' 
             });
         }
 
@@ -1719,107 +1713,185 @@ exports.rolloverPackage = async (req, res) => {
             });
         }
 
-        // Check if package is matured
+        // For Package 4, check if it's a partial rollover (every 10 days)
+        let totalEarnings;
         const now = new Date();
         const packageEndDate = new Date(pkg.endDate);
-        if (now < packageEndDate) {
-            return res.status(400).json({ 
+        
+        if (pkg.packageType === 4) {
+            const daysSinceStart = Math.floor((now - pkg.startDate) / (1000 * 60 * 60 * 24));
+            const currentPeriod = Math.floor(daysSinceStart / 10) + 1;
+            
+            // For partial rollovers, check if we're at a valid claim period
+            if (isPartialRollover) {
+                if (daysSinceStart % 10 !== 0 || daysSinceStart > 40) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Can only rollover on 10-day intervals for Package 4'
+                    });
+                }
+                totalEarnings = 1250; // Fixed amount for each 10-day period
+            } else if (now < packageEndDate) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Package has not matured yet'
+                });
+            } else {
+                // Full maturity rollover
+                totalEarnings = 5000; // Total for full 40-day term
+            }
+        } else {
+            // For packages 1-3, standard rollover logic
+            if (now < packageEndDate) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Package has not matured yet'
+                });
+            }
+
+            // Calculate earnings based on package type
+            if (pkg.packageType === 1) {
+                const baseAmount = 100;
+                const baseTotal = 120;
+                const multiplier = pkg.amount / baseAmount;
+                totalEarnings = parseFloat((baseTotal * multiplier).toFixed(2));
+            } else if (pkg.packageType === 2) {
+                const baseAmount = 500;
+                const baseTotal = 750;
+                const multiplier = pkg.amount / baseAmount;
+                totalEarnings = parseFloat((baseTotal * multiplier).toFixed(2));
+            } else if (pkg.packageType === 3) {
+                const baseAmount = 1000;
+                const baseTotal = 3000;
+                const multiplier = pkg.amount / baseAmount;
+                totalEarnings = parseFloat((baseTotal * multiplier).toFixed(2));
+            }
+        }
+
+        // Check if already claimed (for non-partial rollovers)
+        if (!isPartialRollover && pkg.claimed) {
+            return res.status(400).json({
                 success: false,
-                message: 'Package has not matured yet' 
+                message: 'Package has already been claimed'
             });
         }
 
-        // Check if already claimed
-        if (pkg.claimed) {
-            return res.status(400).json({ 
+        // Validate rollover eligibility based on package type
+        const rolloverRules = {
+            1: {  // From Package 1
+                1: { minAmount: 0 },    // Can rollover to Package 1 with any amount
+                2: { minAmount: 500 },  // Need at least ₱500 to rollover to Package 2
+                3: { minAmount: 1000 }, // Need at least ₱1000 to rollover to Package 3
+                4: { minAmount: 1000 }  // Need at least ₱1000 to rollover to Package 4
+            },
+            2: {  // From Package 2
+                2: { minAmount: 0 },    // Can rollover to Package 2 with any amount
+                3: { minAmount: 1000 }, // Need at least ₱1000 to rollover to Package 3
+                4: { minAmount: 1000 }  // Need at least ₱1000 to rollover to Package 4
+            },
+            3: {  // From Package 3
+                3: { minAmount: 0 },    // Can rollover to Package 3 with any amount
+                4: { minAmount: 1000 }  // Need at least ₱1000 to rollover to Package 4
+            },
+            4: {  // From Package 4
+                4: { minAmount: 0 }     // Can only rollover to Package 4 with any amount
+            }
+        };
+
+        // Check if this rollover is allowed
+        const rule = rolloverRules[pkg.packageType]?.[targetPackageType];
+        if (!rule) {
+            return res.status(400).json({
                 success: false,
-                message: 'Package has already been claimed' 
+                message: `Cannot rollover from Package ${pkg.packageType} to Package ${targetPackageType}`
             });
         }
 
-        // Validate rollover eligibility
-        if (pkg.packageType > targetPackageType) {
-            return res.status(400).json({ 
+        // Check minimum amount requirement
+        if (totalEarnings < rule.minAmount) {
+            return res.status(400).json({
                 success: false,
-                message: 'Can only rollover to the same or higher tier package' 
-            });
-        }
-
-        // Calculate the total earnings from the matured package
-        let totalEarnings;
-        if (pkg.packageType === 1) {
-            const baseAmount = 100;
-            const baseTotal = 120;
-            const multiplier = pkg.amount / baseAmount;
-            totalEarnings = parseFloat((baseTotal * multiplier).toFixed(2));
-        } else if (pkg.packageType === 2) {
-            const baseAmount = 500;
-            const baseTotal = 750;
-            const multiplier = pkg.amount / baseAmount;
-            totalEarnings = parseFloat((baseTotal * multiplier).toFixed(2));
-        } else if (pkg.packageType === 3) {
-            const baseAmount = 1000;
-            const baseTotal = 3000;
-            const multiplier = pkg.amount / baseAmount;
-            totalEarnings = parseFloat((baseTotal * multiplier).toFixed(2));
-        }
-
-        // Validate minimum amount requirements for rollover
-        // Require ₱500 only when moving from Package 1 to Package 2
-        if (pkg.packageType === 1 && targetPackageType === 2 && totalEarnings < 500) {
-            return res.status(400).json({ 
-                success: false,
-                message: 'Insufficient earnings for Package 2 rollover. Minimum required: ₱500' 
-            });
-        }
-
-        // Require ₱1000 only when moving to Package 3 from lower tiers (1 or 2)
-        if ((pkg.packageType === 1 || pkg.packageType === 2) && targetPackageType === 3 && totalEarnings < 1000) {
-            return res.status(400).json({ 
-                success: false,
-                message: 'Insufficient earnings for Package 3 rollover. Minimum required: ₱1000' 
+                message: `Insufficient earnings for Package ${targetPackageType} rollover. Minimum required: ₱${rule.minAmount}`
             });
         }
 
         // Calculate new package details
-        let newAmount, newDailyIncome, newTotalDays;
+        let newAmount, newDailyIncome, newTotalDays, newPackage;
         const startDate = new Date();
         
         if (targetPackageType === 1) {
             newTotalDays = 12;
-            newAmount = totalEarnings; // Use the total earnings as the new investment
-            newDailyIncome = parseFloat((newAmount * 1.667 / 100).toFixed(2)); // Scale based on new amount
+            newAmount = totalEarnings;
+            newDailyIncome = parseFloat((newAmount * 1.667 / 100).toFixed(2));
         } else if (targetPackageType === 2) {
             newTotalDays = 20;
             newAmount = totalEarnings;
-            newDailyIncome = parseFloat((newAmount * 12.5 / 500).toFixed(2)); // Scale based on new amount
+            newDailyIncome = parseFloat((newAmount * 12.5 / 500).toFixed(2));
         } else if (targetPackageType === 3) {
             newTotalDays = 30;
             newAmount = totalEarnings;
-            newDailyIncome = parseFloat((newAmount * 100 / 1000).toFixed(2)); // Scale based on new amount
+            newDailyIncome = parseFloat((newAmount * 100 / 1000).toFixed(2));
+        } else if (targetPackageType === 4) {
+            newTotalDays = 40;
+            newAmount = totalEarnings;
+            newDailyIncome = parseFloat((newAmount * 125 / 1000).toFixed(2));
+            
+            // For Package 4, set up the 10-day claim periods
+            const nextClaimDate = new Date(startDate);
+            nextClaimDate.setDate(startDate.getDate() + 10);
+            
+            newPackage = new Package({
+                user: userId,
+                packageType: 4,
+                amount: newAmount,
+                status: 'active',
+                startDate: startDate,
+                endDate: new Date(startDate.getTime() + (40 * 24 * 60 * 60 * 1000)),
+                dailyIncome: newDailyIncome,
+                totalEarnings: 0,
+                claimed: false,
+                nextClaimDate: nextClaimDate,
+                partialClaims: []
+            });
         }
 
         const newEndDate = new Date(startDate.getTime() + (newTotalDays * 24 * 60 * 60 * 1000));
 
-        // Mark the original package as claimed
-        pkg.claimed = true;
-        pkg.claimedAt = now;
-        pkg.status = 'completed';
-        pkg.totalEarnings = totalEarnings;
-        await pkg.save();
+        // Handle the original package
+        if (isPartialRollover) {
+            // For partial rollovers, just add to partial claims
+            pkg.partialClaims = pkg.partialClaims || [];
+            pkg.partialClaims.push({
+                claimDate: now,
+                amount: totalEarnings,
+                period: period,
+                rolledOver: true,
+                targetPackage: targetPackageType
+            });
+            await pkg.save();
+        } else {
+            // For full rollovers, mark as claimed
+            pkg.claimed = true;
+            pkg.claimedAt = now;
+            pkg.status = 'completed';
+            pkg.totalEarnings = totalEarnings;
+            await pkg.save();
+        }
 
-        // Create new package
-        const newPackage = new Package({
-            user: userId,
-            packageType: targetPackageType,
-            amount: newAmount,
-            status: 'active',
-            startDate: startDate,
-            endDate: newEndDate,
-            dailyIncome: newDailyIncome,
-            totalEarnings: 0,
-            claimed: false
-        });
+        // Create new package if not already created (Package 4 is created above)
+        if (!newPackage) {
+            newPackage = new Package({
+                user: userId,
+                packageType: targetPackageType,
+                amount: newAmount,
+                status: 'active',
+                startDate: startDate,
+                endDate: newEndDate,
+                dailyIncome: newDailyIncome,
+                totalEarnings: 0,
+                claimed: false
+            });
+        }
 
         await newPackage.save();
 
