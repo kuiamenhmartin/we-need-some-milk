@@ -4,7 +4,6 @@ const Package = require('../models/Package');
 const User = require('../models/User');
 const { auth } = require('../middleware/auth');
 const { isAdmin } = require('../middleware/auth');
-const agentController = require('../controllers/agentController');
 
 // Get all packages for a user
 router.get('/my-packages', auth, async (req, res) => {
@@ -17,9 +16,6 @@ router.get('/my-packages', auth, async (req, res) => {
     res.status(500).json({ message: 'Error fetching packages' });
   }
 });
-
-// Handle Package 4 claims and rollovers (every 10 days)
-router.post('/package4-claim', auth, agentController.handlePackage4Claim);
 
 // Create a new package request
 router.post('/request', auth, async (req, res) => {
@@ -102,7 +98,7 @@ router.post('/request', auth, async (req, res) => {
       const multiplier = amount / baseAmount;
       dailyIncome = baseDaily * multiplier;
     } else if (packageType === 4) {
-      // Package 4: ₱1000 investment → ₱125 daily → ₱5000 total return (500% profit)
+      // Package 4: ₱1000 investment → ₱125 daily → ₱5000 total return (400% profit)
       const baseAmount = 1000;
       const baseDaily = 125;
       const multiplier = amount / baseAmount;

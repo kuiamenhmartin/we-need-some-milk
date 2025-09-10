@@ -52,27 +52,6 @@ const packageSchema = new mongoose.Schema({
   },
   claimedAt: {
     type: Date
-  },
-  // Fields for Package 4 partial claims
-  partialClaims: {
-    type: [{
-      claimDate: {
-        type: Date,
-        required: true
-      },
-      amount: {
-        type: Number,
-        required: true
-      },
-      period: {
-        type: Number,
-        required: true
-      }
-    }],
-    default: []
-  },
-  nextClaimDate: {
-    type: Date
   }
 }, {
   timestamps: true
