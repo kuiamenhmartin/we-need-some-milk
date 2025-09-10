@@ -94,6 +94,12 @@ router.post('/packages/activate', auth, async (req, res) => {
   try {
     const { amount, packageId } = req.body;
     const userId = req.user.id;
+    
+    // Get the user object
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
 
     // Validate package ID and amount
     if (packageId === 1) {
@@ -173,6 +179,9 @@ router.post('/packages/activate', auth, async (req, res) => {
 
     // Deduct from wallet
     console.log('Wallet before deduction:', user.wallet, 'Amount to deduct:', amount);
+    if (user.wallet < amount) {
+      return res.status(400).json({ message: 'Insufficient wallet balance' });
+    }
     user.wallet -= amount;
     await user.save();
     console.log('Wallet after deduction:', user.wallet);
