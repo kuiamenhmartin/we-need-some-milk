@@ -1,5 +1,27 @@
 const mongoose = require('mongoose');
 
+const partialClaimSchema = new mongoose.Schema({
+  claimDate: {
+    type: Date,
+    required: true
+  },
+  amount: {
+    type: Number,
+    required: true
+  },
+  period: {
+    type: Number,
+    required: true
+  },
+  rolledOver: {
+    type: Boolean,
+    default: false
+  },
+  targetPackage: {
+    type: Number
+  }
+}, { _id: false });
+
 const packageSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
@@ -28,6 +50,9 @@ const packageSchema = new mongoose.Schema({
     type: Date,
     required: true
   },
+  nextClaimDate: {
+    type: Date
+  },
   dailyIncome: {
     type: Number,
     required: true
@@ -52,7 +77,8 @@ const packageSchema = new mongoose.Schema({
   },
   claimedAt: {
     type: Date
-  }
+  },
+  partialClaims: [partialClaimSchema]
 }, {
   timestamps: true
 });
