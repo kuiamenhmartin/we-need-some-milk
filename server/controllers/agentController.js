@@ -1684,19 +1684,8 @@ exports.rolloverPackage = async (req, res) => {
     try {
         const { packageId, targetPackageType, period } = req.body;
         const userId = req.user._id;
-        const isPartialRollover = pkg.packageType === 4 && pkg.canClaimPartial;
-
-        console.log('Rollover request:', { packageId, targetPackageType, userId, period, isPartialRollover });
-
-        // Validate input
-        if (!packageId || !targetPackageType) {
-            return res.status(400).json({ 
-                success: false,
-                message: 'Package ID and target package type are required' 
-            });
-        }
-
-        // Find the package to rollover
+        
+        // Find the package first
         const pkg = await Package.findOne({
             _id: packageId,
             user: userId,
@@ -1712,6 +1701,20 @@ exports.rolloverPackage = async (req, res) => {
                 message: 'Package not found or not available for rollover' 
             });
         }
+
+        const isPartialRollover = pkg.packageType === 4 && pkg.canClaimPartial;
+
+        console.log('Rollover request:', { packageId, targetPackageType, userId, period, isPartialRollover });
+
+        // Validate input
+        if (!packageId || !targetPackageType) {
+            return res.status(400).json({ 
+                success: false,
+                message: 'Package ID and target package type are required' 
+            });
+        }
+
+        // Package found, continue with rollover logic
 
         // For Package 4, check if it's a partial rollover (every 10 days)
         let totalEarnings;

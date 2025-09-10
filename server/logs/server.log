@@ -7119,3 +7119,4 @@
 2025-09-10T06:26:15.990Z - Uncaught Exception: Error: listen EADDRINUSE: address already in use 0.0.0.0:5001
 2025-09-10T06:30:45.134Z - Uncaught Exception: Error: listen EADDRINUSE: address already in use 0.0.0.0:5001
 2025-09-10T06:54:02.643Z - Uncaught Exception: Error: listen EADDRINUSE: address already in use 0.0.0.0:5001
+2025-09-10T10:02:46.329Z - Error in rollover package: ReferenceError: Cannot access 'pkg' before initialization
