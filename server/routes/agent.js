@@ -95,19 +95,25 @@ router.post('/packages/activate', auth, async (req, res) => {
     const { amount, packageId } = req.body;
     const userId = req.user.id;
 
-    // Validate input
-    if (!amount || !packageId) {
-      return res.status(400).json({ message: 'Amount and package ID are required' });
-    }
-
-    // Get user and check balance
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    if (user.wallet < amount) {
-      return res.status(400).json({ message: 'Insufficient balance' });
+    // Validate package ID and amount
+    if (packageId === 1) {
+      if (amount !== 100) {
+        return res.status(400).json({ message: 'Package 1 amount must be exactly ₱100' });
+      }
+    } else if (packageId === 2) {
+      if (amount !== 500) {
+        return res.status(400).json({ message: 'Package 2 amount must be exactly ₱500' });
+      }
+    } else if (packageId === 3) {
+      if (amount < 1000) {
+        return res.status(400).json({ message: 'Package 3 amount must be at least ₱1000' });
+      }
+    } else if (packageId === 4) {
+      if (amount < 1000) {
+        return res.status(400).json({ message: 'Package 4 amount must be at least ₱1000' });
+      }
+    } else {
+      return res.status(400).json({ message: 'Invalid package ID' });
     }
 
     // Fetch dynamic package configurations from Settings
@@ -502,6 +508,11 @@ router.post('/fix-shared-earnings', auth, async (req, res) => {
         const baseTotal = 3000;
         const multiplier = pkg.amount / baseAmount;
         expectedEarnings = baseTotal * multiplier;
+        } else if (pkg.packageType === 4) {
+        const baseAmount = 1000;
+        const baseTotal = 5000;
+        const multiplier = pkg.amount / baseAmount;
+        expectedEarnings = baseTotal * multiplier;
       }
       
       // Use expected earnings if current earnings seem wrong
@@ -608,6 +619,13 @@ router.post('/claim-packages', async (req, res) => {
                 // Base: ₱1000 → ₱3000 total return
                 const baseAmount = 1000;
                 const baseTotal = 3000;
+                const multiplier = pkg.amount / baseAmount;
+                totalEarnings = baseTotal * multiplier;
+            } else if (pkg.packageType === 4) {
+                // Package 4: Scale based on investment amount
+                // Base: ₱1000 → ₱5000 total return
+                const baseAmount = 1000;
+                const baseTotal = 5000;
                 const multiplier = pkg.amount / baseAmount;
                 totalEarnings = baseTotal * multiplier;
             }
