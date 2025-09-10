@@ -131,6 +131,11 @@ router.post('/packages/activate', auth, async (req, res) => {
     if (amount < packageConfig.minimum) {
       return res.status(400).json({ message: `Amount must be at least ₱${packageConfig.minimum}` });
     }
+    
+    // Validate maximum amount for Package 4
+    if (packageId === 4 && amount > 50000) {
+      return res.status(400).json({ message: 'Package 4 amount cannot exceed ₱50,000' });
+    }
 
     // Calculate dates
     const startDate = new Date();
@@ -158,7 +163,7 @@ router.post('/packages/activate', auth, async (req, res) => {
       const multiplier = amount / baseAmount;
       dailyIncome = baseDaily * multiplier;
     } else if (packageId === 4) {
-      // Package 4: ₱1000 investment → ₱125 daily → ₱6000 total return (500% profit)
+      // Package 4: ₱1000 investment → ₱125 daily → ₱5000 total return (400% profit)
       const baseAmount = 1000;
       const baseDaily = 125;
       const multiplier = amount / baseAmount;
