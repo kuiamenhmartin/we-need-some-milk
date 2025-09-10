@@ -9,7 +9,7 @@ const packageSchema = new mongoose.Schema({
   packageType: {
     type: Number,
     required: true,
-    enum: [1, 2, 3] // 1 for 12 days, 2 for 20 days, 3 for 30 days
+    enum: [1, 2, 3, 4] // 1 for 12 days, 2 for 20 days, 3 for 30 days, 4 for 40 days
   },
   amount: {
     type: Number,
@@ -52,9 +52,30 @@ const packageSchema = new mongoose.Schema({
   },
   claimedAt: {
     type: Date
+  },
+  // Fields for Package 4 partial claims
+  partialClaims: {
+    type: [{
+      claimDate: {
+        type: Date,
+        required: true
+      },
+      amount: {
+        type: Number,
+        required: true
+      },
+      period: {
+        type: Number,
+        required: true
+      }
+    }],
+    default: []
+  },
+  nextClaimDate: {
+    type: Date
   }
 }, {
   timestamps: true
 });
 
-module.exports = mongoose.model('Package', packageSchema); 
+module.exports = mongoose.model('Package', packageSchema);

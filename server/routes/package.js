@@ -4,6 +4,7 @@ const Package = require('../models/Package');
 const User = require('../models/User');
 const { auth } = require('../middleware/auth');
 const { isAdmin } = require('../middleware/auth');
+const agentController = require('../controllers/agentController');
 
 // Get all packages for a user
 router.get('/my-packages', auth, async (req, res) => {
@@ -17,26 +18,32 @@ router.get('/my-packages', auth, async (req, res) => {
   }
 });
 
+// Handle Package 4 claims and rollovers (every 10 days)
+router.post('/package4-claim', auth, agentController.handlePackage4Claim);
+
 // Create a new package request
 router.post('/request', auth, async (req, res) => {
   try {
     const { packageType, amount } = req.body;
     
     // Validate package type and amount
-    if (![1, 2, 3].includes(packageType)) {
+    if (![1, 2, 3, 4].includes(packageType)) {
       return res.status(400).json({ message: 'Invalid package type' });
     }
 
     // Validate amount based on package type
     if ((packageType === 1 && amount !== 100) || 
         (packageType === 2 && amount !== 500) ||
-        (packageType === 3 && amount < 1000)) {
+        (packageType === 3 && amount < 1000) ||
+        (packageType === 4 && amount < 1000)) {
       return res.status(400).json({ 
         message: packageType === 1 
           ? 'Package 1 amount must be ₱100' 
           : packageType === 2
           ? 'Package 2 amount must be ₱500'
-          : 'Package 3 amount must be at least ₱1000'
+          : packageType === 3
+          ? 'Package 3 amount must be at least ₱1000'
+          : 'Package 4 amount must be at least ₱1000'
       });
     }
     
@@ -71,7 +78,7 @@ router.post('/request', auth, async (req, res) => {
     // Calculate package details
     const startDate = new Date();
     const endDate = new Date(startDate);
-    const duration = packageType === 1 ? 12 : packageType === 2 ? 20 : 30; // 12, 20, or 30 days
+    const duration = packageType === 1 ? 12 : packageType === 2 ? 20 : packageType === 3 ? 30 : 40; // 12, 20, 30, or 40 days
     endDate.setDate(endDate.getDate() + duration);
     
     // Calculate daily income for all packages
@@ -92,6 +99,12 @@ router.post('/request', auth, async (req, res) => {
       // Package 3: ₱1000 investment → ₱100 daily → ₱3000 total return (200% profit)
       const baseAmount = 1000;
       const baseDaily = 100;
+      const multiplier = amount / baseAmount;
+      dailyIncome = baseDaily * multiplier;
+    } else if (packageType === 4) {
+      // Package 4: ₱1000 investment → ₱125 daily → ₱5000 total return (500% profit)
+      const baseAmount = 1000;
+      const baseDaily = 125;
       const multiplier = amount / baseAmount;
       dailyIncome = baseDaily * multiplier;
     }
@@ -119,7 +132,10 @@ router.post('/request', auth, async (req, res) => {
     // Multi-level: Traverse up the referral chain, credit commission based on level
     let currentUser = user;
     let level = 1;
-    const commissionRates = { 1: 0.05, 2: 0.02, 3: 0.02, 4: 0.01 };
+    // Package 4 has special commission rates: 5% direct, 2%, 2%, 1% indirect
+    const commissionRates = packageType === 4 
+      ? { 1: 0.05, 2: 0.02, 3: 0.02, 4: 0.01 }
+      : { 1: 0.05, 2: 0.02, 3: 0.02, 4: 0.01 }; // Same rates for other packages
     const maxLevels = 4;
     const processedUsers = new Set();
     const Transaction = require('../models/Transaction');
@@ -239,4 +255,4 @@ router.put('/reject/:id', auth, isAdmin, async (req, res) => {
   }
 });
 
-module.exports = router; 
+module.exports = router;

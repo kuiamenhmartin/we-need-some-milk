@@ -204,6 +204,56 @@ export default function Dashboard() {
     fetchData();
   }, []);
 
+  // Calculate days remaining and check if package is matured
+  const calculatePackageStatus = (pkg) => {
+    if (!pkg || !pkg.startDate || !pkg.endDate) return { daysRemaining: 0, isMatured: false };
+    
+    const now = new Date();
+    const startDate = new Date(pkg.startDate);
+    const endDate = new Date(pkg.endDate);
+    const daysRemaining = Math.max(0, Math.ceil((endDate - now) / (1000 * 60 * 60 * 24)));
+    const isMatured = now >= endDate;
+    
+    // For Package 4, calculate days since start and current period
+    let daysSinceStart = 0;
+    let currentPeriod = 0;
+    let canClaimPartial = false;
+    let nextClaimDay = 0;
+    let daysUntilNextClaim = 0;
+    
+    if (pkg.packageType === 4) {
+      daysSinceStart = Math.floor((now - startDate) / (1000 * 60 * 60 * 24));
+      currentPeriod = Math.floor(daysSinceStart / 10) + 1; // 1-based period (1, 2, 3, 4)
+      
+      // Check if we're at a claim day (every 10 days)
+      canClaimPartial = daysSinceStart % 10 === 0 && daysSinceStart > 0 && daysSinceStart <= 40;
+      
+      // Calculate next claim day
+      nextClaimDay = Math.ceil(daysSinceStart / 10) * 10;
+      daysUntilNextClaim = nextClaimDay - daysSinceStart;
+      
+      // Ensure daysUntilNextClaim is always defined and set to 10 days
+      if ((daysUntilNextClaim === 0 || daysUntilNextClaim === undefined) && !canClaimPartial) {
+        daysUntilNextClaim = 10;
+      }
+      
+      // Check if this period has already been claimed
+      if (pkg.partialClaims && pkg.partialClaims.some(claim => claim.period === currentPeriod)) {
+        canClaimPartial = false;
+      }
+    }
+    
+    return { 
+      daysRemaining, 
+      isMatured, 
+      daysSinceStart, 
+      currentPeriod, 
+      canClaimPartial, 
+      nextClaimDay, 
+      daysUntilNextClaim 
+    };
+  };
+
   const fetchData = async () => {
     // always use 50 clicks and ₱10.00 per day
     setMaxClicks(50);
@@ -248,15 +298,19 @@ export default function Dashboard() {
             return null;
           }
           
-          const totalDays = pkg.packageType === 1 ? 12 : pkg.packageType === 2 ? 20 : 30;
-          const daysRemaining = Math.max(0, Math.ceil((end - now) / (1000 * 60 * 60 * 24)));
-          const isMatured = now >= end;
+          const totalDays = pkg.packageType === 1 ? 12 : pkg.packageType === 2 ? 20 : pkg.packageType === 4 ? 40 : 30;
+          const status = calculatePackageStatus(pkg);
           
           return {
             ...pkg,
-            daysRemaining,
+            daysRemaining: status.daysRemaining,
             totalDays,
-            isMatured
+            isMatured: status.isMatured,
+            daysSinceStart: status.daysSinceStart,
+            currentPeriod: status.currentPeriod,
+            canClaimPartial: status.canClaimPartial,
+            nextClaimDay: status.nextClaimDay,
+            daysUntilNextClaim: status.daysUntilNextClaim
           };
           
         } catch (error) {
@@ -340,11 +394,27 @@ export default function Dashboard() {
 
   const handleClaimPackage = async (packageId) => {
     try {
-      const response = await axios.post('/agent/packages/claim', { packageId });
+      const pkg = activePackages.find(p => p._id === packageId);
+      const isPartialClaim = pkg?.packageType === 4 && pkg?.canClaimPartial;
+      
+      let response;
+      if (isPartialClaim) {
+        // Use the new endpoint for Package 4 partial claims
+        response = await axios.post('/packages/package4-claim', { 
+          packageId, 
+          action: 'claim',
+          period: pkg.currentPeriod 
+        });
+      } else {
+        // Use the regular endpoint for other packages
+        response = await axios.post('/agent/packages/claim', { packageId });
+      }
       
       toast({
         title: 'Package Claimed',
-        description: `Successfully claimed package earnings!`,  // Updated to match the server response
+        description: isPartialClaim ? 
+          `Successfully claimed Period ${pkg.currentPeriod} earnings!` : 
+          `Successfully claimed package earnings!`,
         status: 'success',
         duration: 5000,
         isClosable: true,
@@ -365,7 +435,15 @@ export default function Dashboard() {
   };
 
   const handleRolloverClick = (pkg) => {
-    setSelectedPackageForRollover(pkg);
+    // For Package 4 partial claims, set a fixed earnings amount of 1250
+    if (pkg.packageType === 4 && pkg.canClaimPartial) {
+      setSelectedPackageForRollover({
+        ...pkg,
+        totalEarnings: 1250 // Fixed amount for each 10-day period
+      });
+    } else {
+      setSelectedPackageForRollover(pkg);
+    }
     setSelectedTargetPackage('');
     onRolloverOpen();
   };
@@ -384,14 +462,31 @@ export default function Dashboard() {
 
     setIsRolloverLoading(true);
     try {
-      const response = await axios.post('/agent/packages/rollover', {
-        packageId: selectedPackageForRollover._id,
-        targetPackageType: parseInt(selectedTargetPackage)
-      });
+      const pkg = selectedPackageForRollover;
+      const isPartialRollover = pkg.packageType === 4 && pkg.canClaimPartial;
+      
+      let response;
+      if (isPartialRollover) {
+         // Use the new endpoint for Package 4 partial rollovers
+         response = await axios.post('/packages/package4-claim', { 
+           packageId: pkg._id, 
+           action: 'rollover',
+           period: pkg.currentPeriod,
+           targetType: parseInt(selectedTargetPackage)
+         });
+      } else {
+        // Use the regular endpoint for other packages
+        response = await axios.post('/agent/packages/rollover', {
+          packageId: selectedPackageForRollover._id,
+          targetPackageType: parseInt(selectedTargetPackage)
+        });
+      }
 
       toast({
         title: 'Rollover Successful',
-        description: `Successfully rolled over Package ${selectedPackageForRollover.packageType} to Package ${selectedTargetPackage}`,
+        description: isPartialRollover ?
+          `Successfully rolled over Period ${pkg.currentPeriod} earnings to Package ${selectedTargetPackage}` :
+          `Successfully rolled over Package ${selectedPackageForRollover.packageType} to Package ${selectedTargetPackage}`,
         status: 'success',
         duration: 5000,
         isClosable: true,
@@ -419,31 +514,45 @@ export default function Dashboard() {
 
   const getAvailableRolloverOptions = (currentPackageType, totalEarnings) => {
     const options = [];
+    
+    // For Package 4 partial claims, use fixed amount of 1250
+    const effectiveEarnings = currentPackageType === 4 && !totalEarnings ? 1250 : totalEarnings;
 
-    // Always allow same-tier rollover for Package 1 and Package 2
+    // Always allow same-tier rollover for Package 1, 2, and 4
     if (currentPackageType === 1) {
       options.push({ value: '1', label: 'Package 1 (12 days)', description: 'Reinvest in Package 1' });
     }
     if (currentPackageType === 2) {
       options.push({ value: '2', label: 'Package 2 (20 days)', description: 'Reinvest in Package 2' });
     }
+    if (currentPackageType === 4) {
+      options.push({ value: '4', label: 'Package 4 (40 days)', description: 'Reinvest in Package 4' });
+    }
 
-    // Package 1 can rollover to Package 2 or 3 if earnings meet minimum requirements
-    if (currentPackageType === 1 && totalEarnings >= 500) {
+    // Package 1 can rollover to Package 2, 3, or 4 if earnings meet minimum requirements
+    if (currentPackageType === 1 && effectiveEarnings >= 500) {
       options.push({ value: '2', label: 'Package 2 (20 days)', description: 'Higher returns, longer duration' });
     }
-    if (currentPackageType === 1 && totalEarnings >= 1000) {
-      options.push({ value: '3', label: 'Package 3 (30 days)', description: 'Highest returns, longest duration' });
+    if (currentPackageType === 1 && effectiveEarnings >= 1000) {
+      options.push({ value: '3', label: 'Package 3 (30 days)', description: 'Higher returns, longer duration' });
+      options.push({ value: '4', label: 'Package 4 (40 days)', description: 'Highest returns, longest duration' });
     }
 
-    // Package 2 can rollover to Package 3 if earnings meet minimum requirements
-    if (currentPackageType === 2 && totalEarnings >= 1000) {
-      options.push({ value: '3', label: 'Package 3 (30 days)', description: 'Highest returns, longest duration' });
+    // Package 2 can rollover to Package 3 or 4 if earnings meet minimum requirements
+    if (currentPackageType === 2 && effectiveEarnings >= 1000) {
+      options.push({ value: '3', label: 'Package 3 (30 days)', description: 'Higher returns, longer duration' });
+      options.push({ value: '4', label: 'Package 4 (40 days)', description: 'Highest returns, longest duration' });
     }
 
-    // Package 3 can always rollover to Package 3 (no minimum requirement)
+    // Package 3 can always rollover to Package 3 or 4 (no minimum requirement)
     if (currentPackageType === 3) {
       options.push({ value: '3', label: 'Package 3 (30 days)', description: 'Reinvest in Package 3 for continued growth' });
+      options.push({ value: '4', label: 'Package 4 (40 days)', description: 'Upgrade to highest returns package' });
+    }
+
+    // Package 4 can always rollover to Package 4 (no minimum requirement)
+    if (currentPackageType === 4) {
+      options.push({ value: '4', label: 'Package 4 (40 days)', description: 'Reinvest in Package 4 for continued growth' });
     }
 
     return options;
@@ -597,7 +706,7 @@ export default function Dashboard() {
                           <Text color="#FDB137" fontSize="sm" fontWeight="bold">₱{pkg.totalEarnings.toLocaleString()}</Text>
                         </Flex>
                       </Box>
-                      {pkg.isMatured ? (
+                      {pkg.isMatured || (pkg.packageType === 4 && pkg.canClaimPartial) ? (
                         <Flex gap={2} mt={2}>
                           <Button
                             size="sm"
@@ -613,12 +722,15 @@ export default function Dashboard() {
                             }}
                             transition="all 0.2s"
                             onClick={() => handleClaimPackage(pkg._id)}
-                            title="Claim your matured package earnings!"
+                            title={pkg.packageType === 4 && pkg.canClaimPartial ? 
+                              `Claim Period ${pkg.currentPeriod} earnings (10 days)` : 
+                              "Claim your matured package earnings!"}
                             flex={1}
                           >
-                            Claim
+                            {pkg.packageType === 4 && pkg.canClaimPartial ? `Claim P${pkg.currentPeriod}` : 'Claim'}
                           </Button>
-                          {getAvailableRolloverOptions(pkg.packageType, pkg.totalEarnings).length > 0 && (
+                          {(pkg.isMatured || (pkg.packageType === 4 && pkg.canClaimPartial)) && 
+                           getAvailableRolloverOptions(pkg.packageType, pkg.totalEarnings).length > 0 && (
                             <Button
                               size="sm"
                               leftIcon={<FaExchangeAlt />}
@@ -632,10 +744,12 @@ export default function Dashboard() {
                               }}
                               transition="all 0.2s"
                               onClick={() => handleRolloverClick(pkg)}
-                              title="Rollover to a higher tier package!"
+                              title={pkg.packageType === 4 && pkg.canClaimPartial ? 
+                                `Rollover Period ${pkg.currentPeriod} earnings to a new package!` : 
+                                "Rollover to a higher tier package!"}
                               flex={1}
                             >
-                              Rollover
+                              {pkg.packageType === 4 && pkg.canClaimPartial ? `Rollover P${pkg.currentPeriod}` : 'Rollover'}
                             </Button>
                           )}
                         </Flex>
@@ -649,7 +763,9 @@ export default function Dashboard() {
                           isDisabled
                           transition="all 0.2s"
                         >
-                          Not Yet Matured
+                          {pkg.packageType === 4 ? 
+                            `Next claim in 10 days` : 
+                            "Not Yet Matured"}
                         </Button>
                       )}
                     </VStack>
@@ -672,7 +788,7 @@ export default function Dashboard() {
           >
             Generate Passive Income Through Shared Capital
           </Heading>
-          <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} spacing={4}>
+          <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }} spacing={4}>
             <SharedCapitalPackage
               packageNumber={1}
               minimum={100}
@@ -689,6 +805,12 @@ export default function Dashboard() {
               packageNumber={3}
               minimum={1000}
               onEnter={(amount) => handlePackageEnter(amount, 3)}
+              walletBalance={stats.wallet}
+            />
+            <SharedCapitalPackage
+              packageNumber={4}
+              minimum={1000}
+              onEnter={(amount) => handlePackageEnter(amount, 4)}
               walletBalance={stats.wallet}
             />
           </SimpleGrid>

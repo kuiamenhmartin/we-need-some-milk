@@ -59,7 +59,7 @@ exports.getEarnings = async (req, res) => {
             }
         } else if (now >= endDate) {
                 // Matured but not claimed - calculate potential earnings
-                const totalDays = pkg.packageType === 1 ? 12 : pkg.packageType === 2 ? 20 : 30;
+                const totalDays = pkg.packageType === 1 ? 12 : pkg.packageType === 2 ? 20 : pkg.packageType === 3 ? 30 : 40;
                 let potentialEarnings;
                 
                 if (pkg.packageType === 1) {
@@ -77,6 +77,9 @@ exports.getEarnings = async (req, res) => {
                     const baseTotal = 3000;
                     const multiplier = pkg.amount / baseAmount;
                     potentialEarnings = baseTotal * multiplier;
+                } else if (pkg.packageType === 4) {
+                    // For Package 4, fixed earnings amount of 1250 per partial claim
+                    potentialEarnings = 1250;
                 } else {
                     potentialEarnings = 0;
                 }
@@ -1482,6 +1485,200 @@ exports.getActivePackages = async (req, res) => {
     }
 };
 
+// Handle Package 4 claims and rollovers (every 10 days)
+exports.handlePackage4Claim = async (req, res) => {
+    try {
+        const { packageId, action } = req.body; // action can be 'claim' or 'rollover'
+        const userId = req.user._id;
+
+        console.log('Package 4 claim/rollover request:', { packageId, action, userId });
+
+        // Validate input
+        if (!packageId || !action) {
+            return res.status(400).json({
+                success: false,
+                message: 'Package ID and action are required'
+            });
+        }
+
+        if (!['claim', 'rollover'].includes(action)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid action. Must be "claim" or "rollover"'
+            });
+        }
+
+        // Find the package
+        const pkg = await Package.findOne({
+            _id: packageId,
+            user: userId,
+            packageType: 4, // Only Package 4 supports partial claims
+            status: 'active'
+        });
+
+        if (!pkg) {
+            return res.status(404).json({
+                success: false,
+                message: 'Package not found or not available for claim/rollover'
+            });
+        }
+
+        // Calculate current period based on start date
+        const now = new Date();
+        const startDate = new Date(pkg.startDate);
+        const daysSinceStart = Math.floor((now - startDate) / (1000 * 60 * 60 * 24));
+        const currentPeriod = Math.floor(daysSinceStart / 10) + 1; // 1-based period (1, 2, 3, 4)
+
+        // Check if we're at a valid claim period (every 10 days)
+        if (daysSinceStart % 10 !== 0 && daysSinceStart < 40) {
+            const nextClaimDay = Math.ceil(daysSinceStart / 10) * 10;
+            const daysUntilNextClaim = nextClaimDay - daysSinceStart;
+            return res.status(400).json({
+                success: false,
+                message: `Cannot claim yet. Next claim available in ${daysUntilNextClaim} days.`
+            });
+        }
+
+        // Check if this period has already been claimed
+        if (pkg.partialClaims && pkg.partialClaims.some(claim => claim.period === currentPeriod)) {
+            return res.status(400).json({
+                success: false,
+                message: `Period ${currentPeriod} has already been claimed.`
+            });
+        }
+
+        // Get settings for Package 4
+        const settings = await mongoose.model('Settings').findOne();
+        const claimAmount = settings.package4ClaimAmount || 1250;
+        const rolloverMinimum = settings.package4RolloverMinimum || 1000;
+
+        // For the final period (4th), only allow rollover
+        if (currentPeriod === 4 && action === 'claim') {
+            return res.status(400).json({
+                success: false,
+                message: 'Final period must be rolled over to Package 4.'
+            });
+        }
+
+        // Handle claim action
+        if (action === 'claim') {
+            // Get user
+            const user = await User.findById(userId);
+            if (!user) {
+                return res.status(404).json({ message: 'User not found' });
+            }
+
+            // Update user's shared earnings
+            user.sharedEarnings = parseFloat(((user.sharedEarnings || 0) + claimAmount).toFixed(2));
+            await user.save();
+
+            // Record the partial claim
+            pkg.partialClaims.push({
+                claimDate: now,
+                amount: claimAmount,
+                period: currentPeriod
+            });
+
+            // Set next claim date
+            const nextClaimDate = new Date(startDate);
+            nextClaimDate.setDate(startDate.getDate() + (currentPeriod * 10));
+            pkg.nextClaimDate = nextClaimDate;
+
+            await pkg.save();
+
+            // Create transaction record
+            const transaction = new SharedCapitalTransaction({
+                user: userId,
+                type: 'earning',
+                amount: claimAmount,
+                package: 'Package 4',
+                status: 'completed',
+                description: `Claimed Package 4 period ${currentPeriod}: ₱${claimAmount.toLocaleString()}`
+            });
+            await transaction.save();
+
+            return res.json({
+                success: true,
+                message: `Successfully claimed ₱${claimAmount} for period ${currentPeriod}`,
+                claimedAmount: claimAmount,
+                period: currentPeriod,
+                nextClaimDate: nextClaimDate
+            });
+        }
+
+        // Handle rollover action
+        if (action === 'rollover') {
+            // Create a new Package 4
+            const newPackage = new Package({
+                user: userId,
+                packageType: 4,
+                amount: rolloverMinimum, // Use the minimum amount for rollover
+                status: 'active',
+                startDate: now,
+                endDate: new Date(now.getTime() + (40 * 24 * 60 * 60 * 1000)), // 40 days
+                dailyIncome: 125, // Base daily income for Package 4
+                totalEarnings: 0,
+                claimed: false
+            });
+
+            await newPackage.save();
+
+            // If it's the final period, mark the original package as claimed
+            if (currentPeriod === 4) {
+                pkg.claimed = true;
+                pkg.claimedAt = now;
+                pkg.status = 'completed';
+            }
+
+            // Record the partial claim/rollover
+            pkg.partialClaims.push({
+                claimDate: now,
+                amount: rolloverMinimum,
+                period: currentPeriod
+            });
+
+            // Set next claim date
+            if (currentPeriod < 4) {
+                const nextClaimDate = new Date(startDate);
+                nextClaimDate.setDate(startDate.getDate() + (currentPeriod * 10));
+                pkg.nextClaimDate = nextClaimDate;
+            }
+
+            await pkg.save();
+
+            // Create transaction record
+            const transaction = new SharedCapitalTransaction({
+                user: userId,
+                type: 'rollover',
+                amount: rolloverMinimum,
+                package: 'Package 4',
+                status: 'completed',
+                description: `Rolled over Package 4 period ${currentPeriod}: ₱${rolloverMinimum.toLocaleString()}`
+            });
+            await transaction.save();
+
+            return res.json({
+                success: true,
+                message: `Successfully rolled over ₱${rolloverMinimum} for period ${currentPeriod}`,
+                rolledOverAmount: rolloverMinimum,
+                period: currentPeriod,
+                newPackage: {
+                    id: newPackage._id,
+                    startDate: newPackage.startDate,
+                    endDate: newPackage.endDate
+                }
+            });
+        }
+    } catch (error) {
+        console.error('Error handling Package 4 claim/rollover:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error processing claim/rollover',
+            error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+        });
+    }
+};
+
 // Rollover matured package to a higher tier package
 exports.rolloverPackage = async (req, res) => {
     try {
@@ -1498,7 +1695,7 @@ exports.rolloverPackage = async (req, res) => {
             });
         }
 
-        if (![1, 2, 3].includes(targetPackageType)) {
+        if (![1, 2, 3, 4].includes(targetPackageType)) {
             return res.status(400).json({ 
                 success: false,
                 message: 'Invalid target package type' 

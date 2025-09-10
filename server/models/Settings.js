@@ -62,8 +62,21 @@ const settingsSchema = new mongoose.Schema({
             package1: { amount: 100, duration: 12, income: 20 },
             package2: { amount: 500, duration: 20, income: 50 },
             package3: { amount: 1000, duration: 30, income: 200 }, // 200% profit = ₱2000, total return ₱3000
-            package4: { amount: 5000, duration: 45, income: 120 }
+            package4: { amount: 1000, duration: 40, income: 500 } // 500% profit = ₱5000, total return ₱6000
         }
+    },
+    // Package 4 claim periods (every 10 days)
+    package4ClaimPeriods: {
+        type: Number,
+        default: 4 // 4 periods of 10 days each
+    },
+    package4ClaimAmount: {
+        type: Number,
+        default: 1250 // Amount claimable every 10 days
+    },
+    package4RolloverMinimum: {
+        type: Number,
+        default: 1000 // Minimum amount required for rollover
     },
     paymentMethods: [{
         name: {
@@ -89,4 +102,4 @@ const settingsSchema = new mongoose.Schema({
     timestamps: true
 });
 
-module.exports = mongoose.model('Settings', settingsSchema); 
+module.exports = mongoose.model('Settings', settingsSchema);

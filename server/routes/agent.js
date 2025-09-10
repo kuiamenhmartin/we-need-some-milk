@@ -157,6 +157,12 @@ router.post('/packages/activate', auth, async (req, res) => {
       const baseDaily = 100;
       const multiplier = amount / baseAmount;
       dailyIncome = baseDaily * multiplier;
+    } else if (packageId === 4) {
+      // Package 4: ₱1000 investment → ₱125 daily → ₱6000 total return (500% profit)
+      const baseAmount = 1000;
+      const baseDaily = 125;
+      const multiplier = amount / baseAmount;
+      dailyIncome = baseDaily * multiplier;
     }
 
     // Deduct from wallet
