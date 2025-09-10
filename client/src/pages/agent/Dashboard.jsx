@@ -91,17 +91,7 @@ const SharedCapitalPackage = ({ packageNumber, minimum, onEnter, walletBalance }
       return;
     }
 
-    // Add maximum amount validation for Package 4
-    if (packageNumber === 4 && parseFloat(amount) > 50000) {
-      toast({
-        title: 'Invalid Amount',
-        description: 'Package 4 amount cannot exceed ₱50,000',
-        status: 'error',
-        duration: 3000,
-        isClosable: true,
-      });
-      return;
-    }
+    // No maximum amount validation for Package 4
 
     if (parseFloat(amount) > walletBalance) {
       toast({

@@ -131,11 +131,6 @@ router.post('/packages/activate', auth, async (req, res) => {
     if (amount < packageConfig.minimum) {
       return res.status(400).json({ message: `Amount must be at least ₱${packageConfig.minimum}` });
     }
-    
-    // Validate maximum amount for Package 4
-    if (packageId === 4 && amount > 50000) {
-      return res.status(400).json({ message: 'Package 4 amount cannot exceed ₱50,000' });
-    }
 
     // Calculate dates
     const startDate = new Date();
