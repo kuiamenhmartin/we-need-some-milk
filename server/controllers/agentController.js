@@ -1410,7 +1410,9 @@ exports.getActivePackages = async (req, res) => {
             }
             
             // Calculate package metrics
-            totalDays = pkg.packageType === 1 ? 12 : pkg.packageType === 2 ? 20 : 30;
+            totalDays = pkg.packageType === 1 ? 12 : 
+                      pkg.packageType === 2 ? 20 : 
+                      pkg.packageType === 4 ? 40 : 30;
             daysSinceStart = Math.floor((now - startDate) / (1000 * 60 * 60 * 24));
             daysRemaining = Math.max(0, Math.ceil((endDate - now) / (1000 * 60 * 60 * 24)));
             isMatured = now >= endDate;
@@ -1450,6 +1452,19 @@ exports.getActivePackages = async (req, res) => {
                 const baseAmount = 1000;
                 const baseDaily = 100;
                 const baseTotal = 3000;
+                const multiplier = pkg.amount / baseAmount;
+                displayDailyIncome = baseDaily * multiplier;
+                if (isMatured) {
+                    totalEarnings = baseTotal * multiplier;
+                } else {
+                    totalEarnings = displayDailyIncome * (totalDays - daysRemaining);
+                }
+            } else if (pkg.packageType === 4) {
+                // Package 4: Scale based on investment amount
+                // Base: ₱1000 → ₱125 daily for 40 days (4 periods of 10 days)
+                const baseAmount = 1000;
+                const baseDaily = 125;
+                const baseTotal = 5000;
                 const multiplier = pkg.amount / baseAmount;
                 displayDailyIncome = baseDaily * multiplier;
                 if (isMatured) {

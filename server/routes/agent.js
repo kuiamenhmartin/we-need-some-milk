@@ -650,7 +650,7 @@ router.post('/claim-packages', async (req, res) => {
                 // Update package
                 pkg.claimed = true;
                 pkg.claimedAt = now;
-                await pkg.save();
+                await pkg.save();+MMMMMMMMM
 
                 // Add to total claimed
                 totalClaimed += totalEarnings;
